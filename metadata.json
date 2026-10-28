@@ -1,9 +1,9 @@
 {
-    "uuid": "alt-overview@local",
+    "uuid": "alt_overview@local",
     "name": "Alt Overview",
     "description": "Показує зображення тла робочого стола як фон в Огляді (Overview), з регуляторами яскравості та розмиття.",
-    "shell-version": ["50"],
+    "shell-version": ["50", "51"],
     "url": "",
     "version": 1,
-    "settings-schema": "org.gnome.shell.extensions.alt-overview"
+    "settings-schema": "org.gnome.shell.extensions.alt_overview"
 }

@@ -7,6 +7,7 @@ import { AppGridLayoutController } from "./src/appGridLayoutController.js";
 import { DndManager } from "./src/dndManager.js";
 //import { AppGridOrderController } from "./src/appGridOrderController.js";
 import { BackgroundController } from "./src/backgroundController.js";
+import { DesktopWallpaperEffectsController } from "./src/desktopWallpaperEffectsController.js";
 import { IconInteractionController } from "./src/iconInteractionController.js";
 import { LayoutController } from "./src/layoutController.js";
 import { ScrollController } from "./src/scrollController.js";
@@ -30,6 +31,18 @@ export default class OverviewBackgroundExtension extends Extension {
 
             this._migrateWorkspaceSize();
             this._migrateSearchEntryMode();
+
+            // Desktop wallpaper effects must remain active even before the
+            // user opens Overview for the first time.
+            this._desktopWallpaperEffectsController =
+                new DesktopWallpaperEffectsController(
+                    this._settings,
+                    this._diagnostics,
+                );
+            this._enableComponent(
+                "desktop-wallpaper-effects",
+                this._desktopWallpaperEffectsController,
+            );
 
             this._closeOverviewController = new CloseOverviewController(
                 this._settings,
@@ -347,6 +360,9 @@ export default class OverviewBackgroundExtension extends Extension {
                 },
                 controllers: {
                     background: Boolean(this._backgroundController),
+                    desktopWallpaperEffects: Boolean(
+                        this._desktopWallpaperEffectsController,
+                    ),
                     layout: Boolean(this._layoutController),
                     workspaces: Boolean(this._workspacesController),
                     appGrid: Boolean(this._appGridController),
@@ -394,6 +410,12 @@ export default class OverviewBackgroundExtension extends Extension {
         this._diagnostics?.event("lifecycle", "Extension disable started", {
             wasActive,
         });
+
+        this._disableComponent(
+            "desktop-wallpaper-effects",
+            this._desktopWallpaperEffectsController,
+        );
+        this._desktopWallpaperEffectsController = null;
 
         this._disableComponent("close-overview", this._closeOverviewController);
         this._closeOverviewController = null;

@@ -11,6 +11,16 @@ const EFFECT_NAMES = {
     grain: "overview-bg-grain",
 };
 
+/** Remove AltOverview's named effects from an actor, if it is still alive. */
+export function removeBackgroundEffects(actor) {
+    if (!actor || actor._destroyed || actor.is_destroyed?.()) return;
+
+    for (const name of Object.values(EFFECT_NAMES))
+        actor.remove_effect_by_name(name);
+
+    actor.queue_redraw();
+}
+
 export const BrightnessEffect = GObject.registerClass(
     class BrightnessEffect extends Clutter.BrightnessContrastEffect {
         _init() {
@@ -159,7 +169,7 @@ export class BackgroundEffects {
     }
 
     setActors(actor, grainActor) {
-        if (!actor || !grainActor) {
+        if (!actor) {
             this._detachGrainActor();
             this._actor = null;
             this._grainActor = null;
@@ -167,7 +177,7 @@ export class BackgroundEffects {
         }
 
         if (this._actor === actor && this._grainActor === grainActor) {
-            this._queueRepaint(actor, grainActor);
+            this._queueRepaint(actor, ...(grainActor ? [grainActor] : []));
             return;
         }
 
@@ -196,15 +206,19 @@ export class BackgroundEffects {
         );
         blurEffect?.setBlur(this._blur);
 
-        const grainEffect = this._getOrAttach(
-            grainActor,
-            EFFECT_NAMES.grain,
-            () => new GrainEffect(),
-        );
-        grainEffect?.setActor(grainActor);
-        grainEffect?.setAmount(this._grain);
+        // Grain can be attached to a parent/container separately from the
+        // wallpaper actor. This lets grain render after the actor's blur.
+        if (grainActor) {
+            const grainEffect = this._getOrAttach(
+                grainActor,
+                EFFECT_NAMES.grain,
+                () => new GrainEffect(),
+            );
+            grainEffect?.setActor(grainActor);
+            grainEffect?.setAmount(this._grain);
+        }
 
-        this._queueRepaint(actor, grainActor);
+        this._queueRepaint(actor, ...(grainActor ? [grainActor] : []));
     }
 
     setBrightness(percent) {
