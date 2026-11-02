@@ -55,6 +55,8 @@ export class AppGridLayoutController {
         this._originalCalculateSpacing = null;
         this._centerLastRowChangedId = 0;
         this._originalLastRowAlign = null;
+        this._pagesChangedGrid = null;
+        this._pagesChangedId = 0;
         this._scrollDirectionChangedId = 0;
         this._edgeFadeChangedId = 0;
         this._fadeScrollView = null;
@@ -83,6 +85,20 @@ export class AppGridLayoutController {
 
         this._appGridNavigation.enable();
         this._patchAppGrid();
+        const gridActor = this._appDisplay?._grid;
+        if (gridActor) {
+            this._pagesChangedGrid = gridActor;
+            this._pagesChangedId = gridActor.connect(
+                "pages-changed",
+                () => {
+                    const layoutManager = gridActor.layout_manager;
+                    if (layoutManager?._customGridPatched)
+                        layoutManager._childrenMaxSize = -1;
+
+                    gridActor.queue_relayout();
+                },
+            );
+        }
         this._updateLastRowAlignment();
         this._updateScrollViewFade();
     }
@@ -151,6 +167,12 @@ export class AppGridLayoutController {
         if (this._edgeFadeChangedId) {
             this._settings.disconnect(this._edgeFadeChangedId);
             this._edgeFadeChangedId = 0;
+        }
+
+        if (this._pagesChangedId && this._pagesChangedGrid) {
+            this._pagesChangedGrid.disconnect(this._pagesChangedId);
+            this._pagesChangedGrid = null;
+            this._pagesChangedId = 0;
         }
 
         this._unpatchAppGrid();

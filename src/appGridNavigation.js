@@ -14,6 +14,8 @@ export class AppGridNavigation {
         this._appDisplay = appDisplay;
         this._originalParent = null;
         this._originalIndex = null;
+        this._pagesChangedGrid = null;
+        this._pagesChangedId = 0;
         this._originalScrollViewExpand = null;
         this._originalIndicatorsAlign = null;
         this._originalIndicatorsExpand = null;
@@ -55,6 +57,15 @@ export class AppGridNavigation {
         if (!appDisplay || !scrollView || !pageIndicators) return;
 
         this._patchPageIndicators(pageIndicators);
+
+        const grid = appDisplay._grid;
+        if (grid && !this._pagesChangedId) {
+            this._pagesChangedGrid = grid;
+            this._pagesChangedId = grid.connect("pages-changed", () => {
+                this.update();
+                this._navigation?.queue_relayout();
+            });
+        }
 
         const boxParent = pageIndicators.get_parent?.() ?? null;
         let scrollViewTopLevel = scrollView;
@@ -121,6 +132,12 @@ export class AppGridNavigation {
         const appDisplay = this._appDisplay;
         const overlay = appDisplay?._chOverlayContainer;
         const pageIndicators = appDisplay?._pageIndicators;
+
+        if (this._pagesChangedId && this._pagesChangedGrid) {
+            this._pagesChangedGrid.disconnect(this._pagesChangedId);
+            this._pagesChangedGrid = null;
+            this._pagesChangedId = 0;
+        }
 
         this._destroyNavigation();
 
