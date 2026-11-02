@@ -32,8 +32,6 @@ export default class OverviewBackgroundExtension extends Extension {
             this._migrateWorkspaceSize();
             this._migrateSearchEntryMode();
 
-            // Desktop wallpaper effects must remain active even before the
-            // user opens Overview for the first time.
             this._desktopWallpaperEffectsController =
                 new DesktopWallpaperEffectsController(
                     this._settings,
