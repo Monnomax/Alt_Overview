@@ -488,22 +488,6 @@ export class IconInteractionController {
             item._chLeftClickGesture = null;
             item._chLeftClickGestureActor = null;
 
-            if (item._chDndGesture) {
-                const gesture = item._chDndGesture;
-                const gestureActor = item._chDndGestureActor;
-
-                this._removeActionSafely(gestureActor, gesture);
-
-                try {
-                    item.add_action(gesture);
-                } catch (_error) {
-                    // AppIcon може вже завершувати знищення.
-                }
-
-                item._chDndGesture = null;
-                item._chDndGestureActor = null;
-            }
-
             if (item._chDndReactiveLockId) {
                 try {
                     item._draggable?.disconnect(item._chDndReactiveLockId);
@@ -516,6 +500,11 @@ export class IconInteractionController {
 
             item.reactive = true;
             item.track_hover = true;
+
+            if (item._chOriginalButtonMask !== undefined) {
+                item.button_mask = item._chOriginalButtonMask;
+                item._chOriginalButtonMask = undefined;
+            }
 
             if (icon) icon.reactive = false;
 
@@ -867,6 +856,13 @@ export class IconInteractionController {
         const isFolder = item.has_style_class_name?.("app-folder") === true;
 
         if (!isFolder) {
+            if (item._chOriginalButtonMask === undefined)
+                item._chOriginalButtonMask = item.button_mask;
+            // Custom gestures handle clicks instead of St.Button.
+            item.button_mask = 0;
+        }
+
+        if (!isFolder) {
             this._ensureLabelOverlay(item);
             this._ensureOpenDesktopFileMenuHook(item);
         }
@@ -892,7 +888,7 @@ export class IconInteractionController {
         }
 
         if (item._chHoverInteractionInstalled && item._chHoverIcon === icon) {
-            item.reactive = isFolder;
+            item.reactive = true;
             item.track_hover = false;
             icon.reactive = true;
 
@@ -929,18 +925,13 @@ export class IconInteractionController {
                 item._chMiddleClickGesture = null;
                 item._chMiddleClickGestureActor = null;
             }
-
-            if (item._chDndGestureActor === oldIcon)
-                item._chDndGestureActor = null;
         }
 
         item._chHoverInteractionInstalled = true;
         item._chHoverIcon = icon;
 
-        item.reactive = isFolder;
-        item.track_hover = false;
-
-        item.reactive = isFolder;
+        // Keep the native DND action on the actor that owns its Draggable.
+        item.reactive = true;
         item.track_hover = false;
 
         icon.reactive = true;
@@ -993,23 +984,6 @@ export class IconInteractionController {
             item._chMiddleClickGestureActor = icon;
         }
 
-        const dragGesture = item?._draggable?.startGesture;
-
-        /*
-         * FolderIcon is already reactive. Keep its native DND gesture
-         * attached to the AppViewItem that owns the Draggable.
-         *
-         * Regular AppIcons remain unchanged: their gesture is moved to
-         * the inner icon because their parent actor is non-reactive.
-         */
-        if (dragGesture && !isFolder) {
-            item.remove_action(dragGesture);
-            icon.add_action(dragGesture);
-
-            item._chDndGesture = dragGesture;
-            item._chDndGestureActor = icon;
-        }
-
         if (item._draggable && !item._chDndReactiveLockId) {
             const draggable = item._draggable;
 
@@ -1023,7 +997,7 @@ export class IconInteractionController {
                     return;
 
                 try {
-                    item.reactive = isFolder;
+                    item.reactive = true;
                     item.track_hover = false;
                 } catch (_error) {
                     // The source actor may be entering teardown.
