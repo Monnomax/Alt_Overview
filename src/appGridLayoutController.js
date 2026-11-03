@@ -88,16 +88,13 @@ export class AppGridLayoutController {
         const gridActor = this._appDisplay?._grid;
         if (gridActor) {
             this._pagesChangedGrid = gridActor;
-            this._pagesChangedId = gridActor.connect(
-                "pages-changed",
-                () => {
-                    const layoutManager = gridActor.layout_manager;
-                    if (layoutManager?._customGridPatched)
-                        layoutManager._childrenMaxSize = -1;
+            this._pagesChangedId = gridActor.connect("pages-changed", () => {
+                const layoutManager = gridActor.layout_manager;
+                if (layoutManager?._customGridPatched)
+                    layoutManager._childrenMaxSize = -1;
 
-                    gridActor.queue_relayout();
-                },
-            );
+                gridActor.queue_relayout();
+            });
         }
         this._updateLastRowAlignment();
         this._updateScrollViewFade();
@@ -368,35 +365,66 @@ export class AppGridLayoutController {
             this.columns_per_page = cols;
             this.rows_per_page = rows;
 
-            /*
-             * ВАЖЛИВО:
-             *
-             * Зміна columns_per_page / rows_per_page сама по собі
-             * не переносить уже розкладені елементи між this._pages.
-             *
-             * Наприклад:
-             *
-             *     4 × 8 = 32
-             *
-             * після зміни на:
-             *
-             *     4 × 7 = 28
-             *
-             * перші 28 повинні залишитися на page 0,
-             * а 4 останні — перейти на page 1.
-             *
-             * Без _updatePages() page 0 продовжує містити всі 32
-             * елементи, і vfunc_allocate() малює їх як 5-й рядок.
-             */
-            if (columnsChanged || rowsChanged) {
-                this._updatePages();
+            // Check whether the current page distribution matches
+            // the configured grid capacity.
+            const itemsPerPage = cols * rows;
+            const pages = Array.isArray(this._pages) ? this._pages : [];
+
+            const pageCounts = pages.map(
+                (page) => page.visibleChildren?.length ?? 0,
+            );
+
+            const totalVisibleItems = pageCounts.reduce(
+                (total, count) => total + count,
+                0,
+            );
+
+            const expectedPageCount =
+                itemsPerPage > 0 && totalVisibleItems > 0
+                    ? Math.ceil(totalVisibleItems / itemsPerPage)
+                    : 0;
+
+            const pageDistributionChanged =
+                itemsPerPage > 0 &&
+                (pageCounts.length !== expectedPageCount ||
+                    pageCounts.some(
+                        (count, index) =>
+                            count > itemsPerPage ||
+                            (index < pageCounts.length - 1 &&
+                                count !== itemsPerPage),
+                    ));
+
+            if (columnsChanged || rowsChanged || pageDistributionChanged) {
+                /*
+                 * First pass: fill vacancies between existing pages.
+                 */
+                const fillItemVacancies = () => {
+                    if (typeof this._fillItemVacancies !== "function") return;
+
+                    for (
+                        let pageIndex = 0;
+                        pageIndex < this._pages.length;
+                        pageIndex++
+                    )
+                        this._fillItemVacancies(pageIndex);
+                };
+
+                fillItemVacancies();
 
                 /*
-                 * Склад visibleChildren змінився, тому кеш максимального
-                 * розміру комірки більше не можна використовувати.
+                 * Redistribute surplus items according to the new capacity.
                  */
+                if (typeof this._updatePages === "function")
+                    this._updatePages();
+
+                /*
+                 * Second pass: compact any remaining incomplete pages.
+                 */
+                fillItemVacancies();
+
                 this._childrenMaxSize = -1;
             }
+
             const padding = this.page_padding;
             const availWidth = width - padding.left - padding.right;
             const availHeight = height - padding.top - padding.bottom;
