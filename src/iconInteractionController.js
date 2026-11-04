@@ -193,6 +193,24 @@ export class IconInteractionController {
             mode === "always" ||
             (mode === "hover" && item._chIconHovered === true);
 
+        /*
+         * Do not interrupt an active fade when GNOME redisplays the grid.
+         * Reset opacity only when the visibility mode changes or no
+         * transition is currently running.
+         */
+        const modeChanged = item._chNameVisibilityMode !== mode;
+
+        if (modeChanged) {
+            item._chLabelOpacityGeneration =
+                (item._chLabelOpacityGeneration ?? 0) + 1;
+
+            label.remove_transition("opacity");
+            item._chNameVisibilityMode = mode;
+        } else if (label.get_transition("opacity")) {
+            return;
+        }
+
+        label.opacity = shouldShow ? 255 : 0;
         label.visible = shouldShow;
     }
 
@@ -348,7 +366,14 @@ export class IconInteractionController {
                             ? labelRef
                             : null;
 
-                    if (label) label.visible = true;
+                    if (label) {
+                item._chLabelOpacityGeneration =
+                    (item._chLabelOpacityGeneration ?? 0) + 1;
+
+                label.remove_transition("opacity");
+                label.opacity = 255;
+                label.visible = true;
+            }
                 }
 
                 if (item._chFolderLongPressGesture) {
@@ -435,7 +460,14 @@ export class IconInteractionController {
                 iconBox.queue_relayout();
             }
 
-            if (label) label.visible = true;
+            if (label) {
+                item._chLabelOpacityGeneration =
+                    (item._chLabelOpacityGeneration ?? 0) + 1;
+
+                label.remove_transition("opacity");
+                label.opacity = 255;
+                label.visible = true;
+            }
 
             try {
                 this._runningIndicators.restore(item, icon, iconBin);
@@ -610,6 +642,78 @@ export class IconInteractionController {
     _getCurveDuration(key, curveName) {
         const values = this._settings.get_value(key).deep_unpack();
         return curveName in values ? values[curveName] : 200;
+    }
+
+    _animateLabelVisibility(item, visible) {
+        if (!this._isActorUsable(item)) return;
+
+        const label = item.icon?.label;
+
+        if (!this._isActorUsable(label)) return;
+
+        const curveName = this._settings.get_string(
+            "app-grid-icon-hover-curve",
+        );
+
+        /*
+         * Opacity must change monotonically.
+         * Bounce/Elastic/Back curves make text fade in and out repeatedly.
+         * Keep the icon's selected curve, but use a smooth fade for its label.
+         */
+        const animationMode = Clutter.AnimationMode.EASE_OUT_QUAD;
+
+        const durationKey = visible
+            ? "app-grid-icon-hover-in-durations"
+            : "app-grid-icon-hover-out-durations";
+
+        const duration = this._getCurveDuration(
+            durationKey,
+            curveName,
+        );
+
+        /*
+         * A generation token prevents an obsolete fade-out callback
+         * from hiding a label that has already started fading in again.
+         */
+        const generation = (item._chLabelOpacityGeneration ?? 0) + 1;
+        item._chLabelOpacityGeneration = generation;
+
+        label.remove_transition("opacity");
+
+        if (visible) {
+            /*
+             * Start from zero only when the label was actually hidden.
+             * If it is already fading out, continue from current opacity.
+             */
+            if (!label.visible)
+                label.opacity = 0;
+
+            label.visible = true;
+        }
+
+        label.ease({
+            opacity: visible ? 255 : 0,
+            mode: animationMode,
+            duration,
+
+            onComplete: () => {
+                if (
+                    !this._isActorUsable(item) ||
+                    !this._isActorUsable(label) ||
+                    item._chLabelOpacityGeneration !== generation
+                )
+                    return;
+
+                if (
+                    !visible &&
+                    item._chIconHovered !== true &&
+                    this._settings.get_string(
+                        "app-grid-names-visibility",
+                    ) === "hover"
+                )
+                    label.visible = false;
+            },
+        });
     }
 
     _ensureLabelOverlay(item) {
@@ -1079,7 +1183,7 @@ export class IconInteractionController {
             const mode = this._settings.get_string("app-grid-names-visibility");
 
             if (mode === "hover" && label && this._isActorUsable(label))
-                label.visible = true;
+                this._animateLabelVisibility(item, true);
 
             item.clip_to_allocation = false;
             baseIcon.clip_to_allocation = false;
@@ -1111,7 +1215,7 @@ export class IconInteractionController {
             const mode = this._settings.get_string("app-grid-names-visibility");
 
             if (mode === "hover" && label && this._isActorUsable(label))
-                label.visible = false;
+                this._animateLabelVisibility(item, false);
 
             item.z_position = 0;
             item._updateMultiline();
