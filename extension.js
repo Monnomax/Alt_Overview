@@ -5,7 +5,7 @@ import { OverviewChromeController } from "./src/overviewChromeController.js";
 import { AppGridController } from "./src/appGridController.js";
 import { AppGridLayoutController } from "./src/appGridLayoutController.js";
 import { DndManager } from "./src/dndManager.js";
-//import { AppGridOrderController } from "./src/appGridOrderController.js";
+import { AppGridOrderController } from "./src/appGridOrderController.js";
 import { BackgroundController } from "./src/backgroundController.js";
 import { DesktopWallpaperEffectsController } from "./src/desktopWallpaperEffectsController.js";
 import { IconInteractionController } from "./src/iconInteractionController.js";
@@ -32,6 +32,8 @@ export default class OverviewBackgroundExtension extends Extension {
             this._migrateWorkspaceSize();
             this._migrateSearchEntryMode();
 
+            // Desktop wallpaper effects must remain active even before the
+            // user opens Overview for the first time.
             this._desktopWallpaperEffectsController =
                 new DesktopWallpaperEffectsController(
                     this._settings,
@@ -195,11 +197,11 @@ export default class OverviewBackgroundExtension extends Extension {
                 workspacesDisplay,
             );
             this._appGridController = new AppGridController(settings, appDisplay);
+            this._appGridOrderController = new AppGridOrderController(
+                settings,
+                appDisplay,
+            );
             this._dndManager = new DndManager(appDisplay, this._diagnostics);
-            //this._appGridOrderController = new AppGridOrderController(
-            //    settings,
-            //    appDisplay,
-            //);
             this._iconController = new IconInteractionController(
                 settings,
                 appDisplay,
@@ -227,6 +229,10 @@ export default class OverviewBackgroundExtension extends Extension {
             this._enableComponent("layout", this._layoutController);
             this._enableComponent("workspaces", this._workspacesController);
             this._enableComponent("app-grid", this._appGridController);
+            this._enableComponent(
+                "app-grid-order",
+                this._appGridOrderController,
+            );
             this._enableComponent("dnd", this._dndManager);
             this._runSafely("app-grid", "Update icon names visibility", () =>
                 this._iconController.updateNamesVisibility(),
@@ -255,7 +261,10 @@ export default class OverviewBackgroundExtension extends Extension {
                 (_settings, key) => {
                     if (
                         key === "diagnostics-last-runtime-state" ||
-                        key === "diagnostics-last-error"
+                        key === "diagnostics-last-error" ||
+                        key === "app-grid-launch-counts" ||
+                        key === "app-grid-last-used" ||
+                        key === "app-grid-order"
                     )
                         return;
 
@@ -364,6 +373,7 @@ export default class OverviewBackgroundExtension extends Extension {
                     layout: Boolean(this._layoutController),
                     workspaces: Boolean(this._workspacesController),
                     appGrid: Boolean(this._appGridController),
+                    appGridOrder: Boolean(this._appGridOrderController),
                     dnd: Boolean(this._dndManager),
                     iconInteraction: Boolean(this._iconController),
                     scrolling: Boolean(this._scrollController),
@@ -451,7 +461,10 @@ export default class OverviewBackgroundExtension extends Extension {
         this._disableComponent("app-grid-layout", this._appGridLayoutController);
         this._disableComponent("icon-interaction", this._iconController);
         this._disableComponent("dnd", this._dndManager);
-        //this._appGridOrderController?.disable();
+        this._disableComponent(
+            "app-grid-order",
+            this._appGridOrderController,
+        );
         this._disableComponent("app-grid", this._appGridController);
         this._disableComponent("workspaces", this._workspacesController);
         this._disableComponent("layout", this._layoutController);

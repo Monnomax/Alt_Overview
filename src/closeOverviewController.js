@@ -10,8 +10,13 @@ export default class CloseOverviewController {
 
     enable() {
         this._handlerId = global.stage.connect(
-            "button-press-event",
-            (_actor, event) => this._handleButtonPress(event),
+            "captured-event",
+            (_actor, event) => {
+                if (event.type() !== Clutter.EventType.BUTTON_PRESS)
+                    return Clutter.EVENT_PROPAGATE;
+
+                return this._handleButtonPress(event);
+            },
         );
     }
 
@@ -28,6 +33,29 @@ export default class CloseOverviewController {
         if (!Main.overview.visible) return Clutter.EVENT_PROPAGATE;
 
         const button = event.get_button();
+
+        /*
+         * Обробляємо порожню частину AppIcon на capture-фазі,
+         * до того, як подія потрапить до внутрішніх обробників.
+         */
+        if (button === 1 || button === 2 || button === 3) {
+            const [x, y] = event.get_coords();
+
+            if (this._isAppIconTileBackground(x, y)) {
+                const setting =
+                    button === 1
+                        ? "close-on-left-click"
+                        : button === 3
+                          ? "close-on-right-click"
+                          : "close-on-middle-click";
+
+                if (this._settings.get_boolean(setting))
+                    Main.overview.hide();
+
+                // Never propagate clicks from an empty AppIcon tile.
+                return Clutter.EVENT_STOP;
+            }
+        }
 
         // A middle click closes a window preview or an Overview background.
         if (button === 2) {
@@ -59,6 +87,57 @@ export default class CloseOverviewController {
         }
 
         return Clutter.EVENT_PROPAGATE;
+    }
+
+    _isAppIconTileBackground(stageX, stageY) {
+        const appDisplay =
+            Main.overview?._overview?._controls?._appDisplay;
+        const grid = appDisplay?._grid;
+
+        if (!grid) return false;
+
+        for (let index = 0; index < grid.get_n_children(); index++) {
+            const item = grid.get_child_at_index(index);
+
+            if (!item?.app || !item.visible || !item.icon?.icon)
+                continue;
+
+            const icon = item.icon.icon;
+
+            try {
+                const [tileValid, tileX, tileY] =
+                    item.transform_stage_point(stageX, stageY);
+
+                if (
+                    !tileValid ||
+                    tileX < 0 ||
+                    tileY < 0 ||
+                    tileX >= item.width ||
+                    tileY >= item.height
+                )
+                    continue;
+
+                if (icon.visible) {
+                    const [iconValid, iconX, iconY] =
+                        icon.transform_stage_point(stageX, stageY);
+
+                    if (
+                        iconValid &&
+                        iconX >= 0 &&
+                        iconY >= 0 &&
+                        iconX < icon.width &&
+                        iconY < icon.height
+                    )
+                        return false;
+                }
+
+                return true;
+            } catch (_error) {
+                // Актор міг бути перебудований під час оновлення AppGrid.
+            }
+        }
+
+        return false;
     }
 
     _isBackgroundTarget(target) {

@@ -52,7 +52,7 @@ const RunningDot = GObject.registerClass(
 );
 
 export class RunningIndicators {
-    static DOT_SIZE = 20;
+    static DOT_SIZE = 30;
 
     ensureOverlay(item, iconSize = null) {
         const icon = item?.icon?.icon;
@@ -100,9 +100,19 @@ export class RunningIndicators {
         iconBin.child = overlay;
         overlay.add_child(icon);
 
-        const dot = new RunningDot(RunningIndicators.DOT_SIZE);
+        const dotSize = RunningIndicators.DOT_SIZE;
+
+        const dot = new RunningDot(dotSize);
+        dot.set_size(dotSize, dotSize);
+
         const dotColor = getAverageAppIconColor(item.app);
-        if (dotColor) dot.set_style(`background-color: ${dotColor};`);
+
+        const styles = [`border-radius: ${dotSize / 2}px;`];
+
+        if (dotColor) styles.push(`background-color: ${dotColor};`);
+
+        dot.set_style(styles.join(" "));
+
         dot.clip_to_allocation = false;
         overlay.add_child(dot);
 

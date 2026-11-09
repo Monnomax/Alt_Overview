@@ -207,12 +207,6 @@
             <description>Спосіб упорядкування іконок у сітці програм.</description>
         </key>
 
-        <key name="app-grid-manual-order" type="as">
-            <default>[]</default>
-            <summary>Власний порядок застосунків у сітці</summary>
-            <description>Список ID застосунків у ручному порядку.</description>
-        </key>
-
         <key name="app-grid-launch-counts" type="a{si}">
             <default>{}</default>
             <summary>Лічильники запусків застосунків</summary>

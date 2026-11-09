@@ -14,14 +14,23 @@ export class AppGridOrderController {
         this._settings = settings;
         this._appDisplay = appDisplay;
         this._appSystem = Shell.AppSystem.get_default();
-        this._originalCompareItems = null;
         this._originalLoadApps = null;
         this._originalRedisplay = null;
-        this._isRedisplaying = false;
-        this._isDragging = false;
+        this._originalSavePages = null;
+        this._originalMaybeMoveItem = null;
+        this._originalAcceptDrop = null;
+        this._originalCreateFolder = null;
+
         this._settingsChangedId = 0;
         this._appStateChangedId = 0;
         this._originalGetItemPosition = null;
+
+        this._patchedGetItemPosition = null;
+        this._patchedRedisplay = null;
+        this._patchedSavePages = null;
+        this._patchedMaybeMoveItem = null;
+        this._patchedAcceptDrop = null;
+        this._patchedCreateFolder = null;
 
         this._targetPositions = null;
     }
@@ -32,20 +41,34 @@ export class AppGridOrderController {
         if (
             !appDisplay ||
             !appSystem ||
-            typeof appDisplay._compareItems !== "function" ||
             typeof appDisplay._loadApps !== "function" ||
             typeof appDisplay._getItemPosition !== "function" ||
-            typeof appDisplay._redisplay !== "function"
+            typeof appDisplay._redisplay !== "function" ||
+            typeof appDisplay._savePages !== "function" ||
+            typeof appDisplay._maybeMoveItem !== "function" ||
+            typeof appDisplay.acceptDrop !== "function" ||
+            typeof appDisplay.createFolder !== "function"
         )
             return;
 
-        this._originalCompareItems = appDisplay._compareItems;
         this._originalLoadApps = appDisplay._loadApps;
         this._originalGetItemPosition = appDisplay._getItemPosition;
         this._originalRedisplay = appDisplay._redisplay;
+        this._originalSavePages = appDisplay._savePages;
+        this._originalMaybeMoveItem = appDisplay._maybeMoveItem;
+        this._originalAcceptDrop = appDisplay.acceptDrop;
+        this._originalCreateFolder = appDisplay.createFolder;
+
         const controller = this;
 
         appDisplay._getItemPosition = function (item) {
+            /*
+             * Preserve GNOME's native handling of the temporary
+             * placeholder used during drag operations.
+             */
+            if (item === this._placeholder)
+                return controller._originalGetItemPosition.call(this, item);
+
             const target = controller._targetPositions?.get(item);
 
             if (target) return target;
@@ -57,48 +80,121 @@ export class AppGridOrderController {
             if (controller._getOrderMode() === "manual")
                 return controller._originalRedisplay.apply(this, args);
 
+            const compareItems = controller._createComparator();
             const items = controller._originalLoadApps
                 .call(this)
-                .sort(controller._compareOrderedItems.bind(controller));
+                .sort(compareItems);
 
             const itemsPerPage = this._grid.itemsPerPage;
 
             if (!Number.isFinite(itemsPerPage) || itemsPerPage <= 0)
                 return controller._originalRedisplay.apply(this, args);
 
-            controller._targetPositions = new Map();
-
-            items.forEach((item, index) => {
-                const page = Math.floor(index / itemsPerPage);
-                const position = index % itemsPerPage;
-
-                controller._targetPositions.set(item, [page, position]);
-            });
-
             /*
-             * Native AppDisplay._redisplay() calls this._loadApps() again.
-             * Reuse exactly the same AppIcon objects that were used above,
-             * otherwise _targetPositions contains different object identities.
+             * Preserve the current _loadApps implementation.
+             * It may already be patched by AppGridController.
              */
-            const originalLoadApps = this._appDisplay._loadApps;
-
-            this._appDisplay._loadApps = function () {
-                return items;
-            };
+            const originalLoadApps = this._loadApps;
 
             try {
+                controller._targetPositions = new Map();
+
+                items.forEach((item, index) => {
+                    const page = Math.floor(index / itemsPerPage);
+                    const position = index % itemsPerPage;
+
+                    controller._targetPositions.set(item, [page, position]);
+                });
+
+                /*
+                 * Reuse exactly the same AppIcon objects that were used
+                 * to calculate target positions.
+                 */
+                this._loadApps = function () {
+                    return items;
+                };
+
                 return controller._originalRedisplay.apply(this, args);
             } finally {
-                this._appDisplay._loadApps = originalLoadApps;
+                this._loadApps = originalLoadApps;
                 controller._targetPositions = null;
             }
         };
 
-        if (controller._getOrderMode() !== "manual") {
-            appDisplay._compareItems = function (left, right) {
-                return controller._compareOrderedItems(left, right);
-            };
-        }
+        /*
+         * Keep manual PageManager positions untouched while automatic
+         * sorting is active.
+         */
+        appDisplay._savePages = function (...args) {
+            if (controller._getOrderMode() !== "manual")
+                return;
+
+            return controller._originalSavePages.apply(this, args);
+        };
+
+        /*
+         * Disable manual icon repositioning in automatic modes.
+         * Folder-related drops are handled separately by AppIcon.
+         */
+        appDisplay._maybeMoveItem = function (...args) {
+            /*
+             * Ordinary icons must not change the saved manual layout.
+             * GNOME's temporary placeholder must remain movable.
+             */
+            if (
+                controller._getOrderMode() !== "manual" &&
+                !this._placeholder
+            ) {
+                this._removeDelayedMove?.();
+                return;
+            }
+
+            return controller._originalMaybeMoveItem.apply(this, args);
+        };
+
+        /*
+         * In automatic modes, discard pending grid-position changes.
+         * The native method still handles removing apps from folders
+         * and favorites after the grid-specific move has been cancelled.
+         */
+        appDisplay.acceptDrop = function (source, ...args) {
+            if (controller._getOrderMode() !== "manual") {
+                delete this._dropTarget;
+                this._removeDelayedMove?.();
+            }
+
+            return controller._originalAcceptDrop.call(
+                this,
+                source,
+                ...args,
+            );
+        };
+
+        /*
+         * Creating a folder initially places it at the drop location.
+         * Reapply automatic sorting after the native operation finishes.
+         */
+        appDisplay.createFolder = function (...args) {
+            const result = controller._originalCreateFolder.apply(
+                this,
+                args,
+            );
+
+            if (
+                result &&
+                controller._getOrderMode() !== "manual"
+            )
+                controller._refreshAppGrid();
+
+            return result;
+        };
+
+        this._patchedGetItemPosition = appDisplay._getItemPosition;
+        this._patchedRedisplay = appDisplay._redisplay;
+        this._patchedSavePages = appDisplay._savePages;
+        this._patchedMaybeMoveItem = appDisplay._maybeMoveItem;
+        this._patchedAcceptDrop = appDisplay.acceptDrop;
+        this._patchedCreateFolder = appDisplay.createFolder;
 
         this._settingsChangedId = this._settings.connect(
             "changed::app-grid-order",
@@ -125,10 +221,9 @@ export class AppGridOrderController {
                 new GLib.Variant("a{sx}", lastUsed),
             );
 
-            if (
-                controller._getOrderMode() === "usage" ||
-                controller._getOrderMode() === "last-used"
-            )
+            const mode = controller._getOrderMode();
+
+            if (mode === "usage" || mode === "last-used")
                 appDisplay._redisplay?.();
         };
 
@@ -149,31 +244,43 @@ export class AppGridOrderController {
             this._appStateChangedId = 0;
         }
 
-        if (
-            this._appDisplay &&
-            this._originalGetItemPosition &&
-            this._appDisplay._getItemPosition !== this._originalGetItemPosition
-        )
-            this._appDisplay._getItemPosition = this._originalGetItemPosition;
+        const appDisplay = this._appDisplay;
 
-        if (
-            this._appDisplay &&
-            this._originalRedisplay &&
-            this._appDisplay._redisplay !== this._originalRedisplay
-        )
-            this._appDisplay._redisplay = this._originalRedisplay;
+        if (appDisplay) {
+            if (appDisplay._getItemPosition === this._patchedGetItemPosition)
+                appDisplay._getItemPosition = this._originalGetItemPosition;
 
-        if (
-            this._appDisplay &&
-            this._originalCompareItems &&
-            this._appDisplay._compareItems !== this._originalCompareItems
-        )
-            this._appDisplay._compareItems = this._originalCompareItems;
+            if (appDisplay._redisplay === this._patchedRedisplay)
+                appDisplay._redisplay = this._originalRedisplay;
 
-        this._originalCompareItems = null;
+            if (appDisplay._savePages === this._patchedSavePages)
+                appDisplay._savePages = this._originalSavePages;
+
+            if (appDisplay._maybeMoveItem === this._patchedMaybeMoveItem)
+                appDisplay._maybeMoveItem = this._originalMaybeMoveItem;
+
+            if (appDisplay.acceptDrop === this._patchedAcceptDrop)
+                appDisplay.acceptDrop = this._originalAcceptDrop;
+
+            if (appDisplay.createFolder === this._patchedCreateFolder)
+                appDisplay.createFolder = this._originalCreateFolder;
+        }
+
         this._originalLoadApps = null;
         this._originalGetItemPosition = null;
         this._originalRedisplay = null;
+        this._originalSavePages = null;
+        this._originalMaybeMoveItem = null;
+        this._originalAcceptDrop = null;
+        this._originalCreateFolder = null;
+
+        this._patchedGetItemPosition = null;
+        this._patchedRedisplay = null;
+        this._patchedSavePages = null;
+        this._patchedMaybeMoveItem = null;
+        this._patchedAcceptDrop = null;
+        this._patchedCreateFolder = null;
+
         this._targetPositions = null;
     }
 
@@ -182,114 +289,61 @@ export class AppGridOrderController {
         return ORDER_MODES.includes(mode) ? mode : "manual";
     }
 
-    _compareOrderedItems(left, right) {
+    _createComparator() {
         const mode = this._getOrderMode();
-        if (mode === "manual") return this._compareManualItems(left, right);
 
-        const counts = this._getDictionary("app-grid-launch-counts");
-        const lastUsed = this._getDictionary("app-grid-last-used");
-        const leftId = this._getItemId(left);
-        const rightId = this._getItemId(right);
+        /*
+         * Read statistics once per redisplay, not once per comparison.
+         * Folder metrics are aggregated from their contained applications.
+         */
+        const counts = mode === "usage"
+            ? this._getDictionary("app-grid-launch-counts")
+            : {};
 
-        if (mode === "usage")
-            return (
-                (counts[rightId] ?? 0) - (counts[leftId] ?? 0) ||
-                this._compareNames(left, right)
-            );
+        const lastUsed = mode === "last-used"
+            ? this._getDictionary("app-grid-last-used")
+            : {};
 
-        if (mode === "last-used")
-            return (
-                (lastUsed[rightId] ?? 0) - (lastUsed[leftId] ?? 0) ||
-                this._compareNames(left, right)
-            );
+        const metrics = new Map();
 
-        const nameOrder = this._compareNames(left, right);
-        return mode === "name-descending" ? -nameOrder : nameOrder;
-    }
+        const getMetrics = item => {
+            if (metrics.has(item))
+                return metrics.get(item);
 
-    _compareManualItems(left, right) {
-        const order = this._getManualOrder();
-        const leftId = this._getItemId(left);
-        const rightId = this._getItemId(right);
-        const leftPosition = leftId ? order.indexOf(leftId) : -1;
-        const rightPosition = rightId ? order.indexOf(rightId) : -1;
+            const appIds = this._getItemIds(item);
 
-        if (leftPosition >= 0 && rightPosition >= 0)
-            return leftPosition - rightPosition;
-        if (leftPosition >= 0) return -1;
-        if (rightPosition >= 0) return 1;
+            const itemMetrics = {
+                usage: appIds.reduce(
+                    (total, id) => total + (counts[id] ?? 0),
+                    0,
+                ),
+                lastUsed: appIds.reduce(
+                    (latest, id) => Math.max(latest, lastUsed[id] ?? 0),
+                    0,
+                ),
+            };
 
-        return this._compareNames(left, right);
-    }
+            metrics.set(item, itemMetrics);
+            return itemMetrics;
+        };
 
-    _getManualOrder() {
-        return this._settings.get_strv("app-grid-manual-order");
-    }
+        return (left, right) => {
+            if (mode === "usage")
+                return (
+                    getMetrics(right).usage - getMetrics(left).usage ||
+                    this._compareNames(left, right)
+                );
 
-    _setManualOrder(order) {
-        this._settings.set_strv("app-grid-manual-order", order);
-        this._refreshAppGrid();
-    }
+            if (mode === "last-used")
+                return (
+                    getMetrics(right).lastUsed -
+                    getMetrics(left).lastUsed ||
+                    this._compareNames(left, right)
+                );
 
-    _saveCurrentManualOrder() {
-        if (!this._isDragging) return;
-
-        const items = this._appDisplay?._orderedItems;
-
-        if (!items?.length) return;
-
-        const order = items
-            .map((item) => this._getItemId(item))
-            .filter(Boolean);
-
-        if (!order.length) return;
-
-        const currentOrder = this._getManualOrder();
-
-        if (order.join("\n") === currentOrder.join("\n")) return;
-
-        this._settings.set_strv("app-grid-manual-order", order);
-    }
-
-    _normalizeManualOrder(items) {
-        const availableIds = items
-            .map((item) => this._getItemId(item))
-            .filter(Boolean);
-        const availableSet = new Set(availableIds);
-        const currentOrder = this._getManualOrder();
-        const normalizedOrder = [];
-        const normalizedSet = new Set();
-
-        for (const id of currentOrder) {
-            if (availableSet.has(id) && !normalizedSet.has(id)) {
-                normalizedOrder.push(id);
-                normalizedSet.add(id);
-            }
-        }
-
-        for (const id of availableIds) {
-            if (!normalizedSet.has(id)) {
-                normalizedOrder.push(id);
-                normalizedSet.add(id);
-            }
-        }
-
-        if (normalizedOrder.join("\n") !== currentOrder.join("\n"))
-            this._settings.set_strv("app-grid-manual-order", normalizedOrder);
-
-        return normalizedOrder;
-    }
-
-    moveItem(itemId, targetIndex) {
-        const order = this._getManualOrder().filter((id) => id !== itemId);
-        const index = Math.max(0, Math.min(targetIndex, order.length));
-        order.splice(index, 0, itemId);
-        this._setManualOrder(order);
-    }
-
-    resetManualOrder() {
-        this._settings.reset("app-grid-manual-order");
-        this._refreshAppGrid();
+            const nameOrder = this._compareNames(left, right);
+            return mode === "name-descending" ? -nameOrder : nameOrder;
+        };
     }
 
     _refreshAppGrid() {
@@ -305,8 +359,16 @@ export class AppGridOrderController {
         grid.queue_relayout?.();
     }
 
-    _getItemId(item) {
-        return item.app ? this._getAppId(item.app) : "";
+    _getItemIds(item) {
+        if (item.app) {
+            const appId = this._getAppId(item.app);
+            return appId ? [appId] : [];
+        }
+
+        if (typeof item.getAppIds === "function")
+            return item.getAppIds();
+
+        return [];
     }
 
     _compareNames(left, right) {

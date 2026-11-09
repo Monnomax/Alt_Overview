@@ -792,8 +792,8 @@ export default class OverviewBackgroundPreferences extends ExtensionPreferences 
             model: new Gtk.StringList({
                 strings: [
                     _("Ручний"),
-                    _("A → Z / А → Я"),
-                    _("Z → A / Я → А"),
+                    _("А → Я / A → Z"),
+                    _("Я → А / Z → A"),
                     _("За частотою використання"),
                     _("За останнім запуском"),
                 ],

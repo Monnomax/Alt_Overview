@@ -393,6 +393,17 @@ export class IconInteractionController {
                 continue;
             }
 
+            if (item._chContextMenuOpenStateId) {
+                this._disconnectSignalSafely(
+                    item._chContextMenuActor,
+                    item._chContextMenuOpenStateId,
+                );
+            }
+
+            item._chContextMenuActor = null;
+            item._chContextMenuOpenStateId = 0;
+            item._chContextMenuOpen = false;
+
             if (item._chOpenDesktopFileMenuItem)
                 item._chOpenDesktopFileMenuItem.visible = false;
 
@@ -835,19 +846,28 @@ export class IconInteractionController {
             IconInteractionController.APP_ICON_TILE_SIZE;
     }
 
-    _closeActiveAppWindow(item) {
+    _closeAppWindows(item) {
         const app = item?.app;
-        const focusedWindow = global.display?.focus_window;
 
-        if (!app || !focusedWindow) return;
+        if (!app) return;
 
         const windows = app.get_windows?.() ?? [];
 
-        if (!windows.includes(focusedWindow)) return;
+        if (!windows.length) return;
 
-        if (!focusedWindow.can_close?.()) return;
+        const timestamp = global.get_current_time();
 
-        focusedWindow.delete(global.get_current_time());
+        for (const window of windows) {
+            if (!window) continue;
+
+            if (
+                typeof window.can_close === "function" &&
+                !window.can_close()
+            )
+                continue;
+
+            window.delete(timestamp);
+        }
     }
 
     _ensureOpenDesktopFileMenuHook(item) {
@@ -865,8 +885,87 @@ export class IconInteractionController {
         item.popupMenu = function (...args) {
             const result = originalPopupMenu.apply(this, args);
             controller._ensureOpenDesktopFileMenu(this);
+            controller._ensureContextMenuHoverHandler(this);
             return result;
         };
+    }
+
+    _ensureContextMenuHoverHandler(item) {
+        const menu = item?._menu;
+
+        if (!menu || !this._isActorUsable(menu)) return;
+
+        if (item._chContextMenuActor !== menu) {
+            this._disconnectSignalSafely(
+                item._chContextMenuActor,
+                item._chContextMenuOpenStateId,
+            );
+
+            item._chContextMenuActor = menu;
+
+            item._chContextMenuOpenStateId = menu.connect(
+                "open-state-changed",
+                (_menu, isOpen) => {
+                    if (!this._isActorUsable(item)) return;
+
+                    item._chContextMenuOpen = isOpen;
+                    this._syncIconHoverWithContextMenu(item, isOpen);
+                },
+            );
+        }
+
+        /*
+         * popupMenu() відкриває меню раніше, ніж обгортка
+         * встигає підключити open-state-changed.
+         * Тому окремо перевіряємо його поточний стан.
+         */
+        if (menu.isOpen && !item._chContextMenuOpen) {
+            item._chContextMenuOpen = true;
+            this._syncIconHoverWithContextMenu(item, true);
+        }
+    }
+
+    _syncIconHoverWithContextMenu(item, menuOpen) {
+        if (!this._isActorUsable(item)) return;
+
+        const baseIcon = item.icon;
+        const icon = baseIcon?.icon;
+
+        if (!this._isActorUsable(icon)) return;
+
+        let hovered = menuOpen;
+
+        if (!menuOpen) {
+            const [stageX, stageY] = global.get_pointer();
+            const [valid, x, y] =
+                icon.transform_stage_point(stageX, stageY);
+
+            hovered =
+                valid &&
+                icon.visible &&
+                x >= 0 &&
+                y >= 0 &&
+                x < icon.width &&
+                y < icon.height;
+        }
+
+        item._chIconHovered = hovered;
+
+        item.z_position = hovered
+            ? IconInteractionController.HOVER_Z_POSITION
+            : 0;
+
+        item._updateMultiline?.();
+
+        const label = baseIcon.label;
+        const namesMode = this._settings.get_string(
+            "app-grid-names-visibility",
+        );
+
+        if (namesMode === "hover" && this._isActorUsable(label))
+            this._animateLabelVisibility(item, hovered);
+
+        this._animate(item, "hover", hovered);
     }
 
     _ensureOpenDesktopFileMenu(item) {
@@ -1079,7 +1178,7 @@ export class IconInteractionController {
             });
 
             middleClickGesture.connect("recognize", () => {
-                if (this._isActorUsable(item)) this._closeActiveAppWindow(item);
+                if (this._isActorUsable(item)) this._closeAppWindows(item);
             });
 
             icon.add_action(middleClickGesture);
@@ -1210,6 +1309,10 @@ export class IconInteractionController {
 
             const label = baseIcon.label;
 
+            // Context menu must preserve the hovered icon appearance.
+            if (item._chContextMenuOpen)
+                return Clutter.EVENT_PROPAGATE;
+
             item._chIconHovered = false;
 
             const mode = this._settings.get_string("app-grid-names-visibility");
@@ -1226,7 +1329,15 @@ export class IconInteractionController {
         });
 
         item._chPressHandlerId = item.connect("notify::pressed", () => {
-            if (this._isActorUsable(item)) this._animate(item, "press");
+            /*
+             * pressed належить усій плитці.
+             * Анімуємо лише під час наведення на графічну іконку.
+             */
+            if (
+                this._isActorUsable(item) &&
+                item._chIconHovered
+            )
+                this._animate(item, "press");
         });
     }
 }

@@ -26,12 +26,19 @@ export class ControlsLayoutPatch {
     }
 
     updateThumbnailsBox() {
+        const controls = this._controls;
+        const thumbnailsBox = controls?._thumbnailsBox;
+
         if (
-            this._controls &&
-            typeof this._controls._updateThumbnailsBox === "function"
-        ) {
-            this._controls._updateThumbnailsBox(false);
-        }
+            !controls ||
+            controls.is_destroyed?.() ||
+            !thumbnailsBox ||
+            thumbnailsBox.is_destroyed?.() ||
+            typeof controls._updateThumbnailsBox !== "function"
+        )
+            return;
+
+        controls._updateThumbnailsBox(false);
     }
 
     _setWorkspaceSize(workspaceBox, workAreaBox) {
@@ -81,10 +88,21 @@ export class ControlsLayoutPatch {
         const patch = this;
 
         this._controls._updateThumbnailsBox = function (...args) {
+            const thumbnailsBox = this._thumbnailsBox;
+
+            if (
+                this.is_destroyed?.() ||
+                !thumbnailsBox ||
+                thumbnailsBox.is_destroyed?.()
+            )
+                return;
+
             patch._originalUpdateThumbnailsBox.apply(this, args);
 
-            const thumbnailsBox = this._thumbnailsBox;
-            if (!thumbnailsBox)
+            if (
+                this._thumbnailsBox !== thumbnailsBox ||
+                thumbnailsBox.is_destroyed?.()
+            )
                 return;
 
             const show =
