@@ -32,27 +32,30 @@ function getAverageAppIconColor(app) {
 
 const RunningDot = GObject.registerClass(
     class RunningDot extends St.Widget {
-        _init(size) {
+        _init(width, height) {
             super._init({
                 style_class: "ch-app-grid-running-dot",
                 reactive: false,
                 can_focus: false,
             });
-            this._dotSize = size;
+            this._dotWidth = width;
+            this._dotHeight = height;
         }
 
         vfunc_get_preferred_width(_forHeight) {
-            return [this._dotSize, this._dotSize];
+            return [this._dotWidth, this._dotWidth];
         }
 
         vfunc_get_preferred_height(_forWidth) {
-            return [this._dotSize, this._dotSize];
+            return [this._dotHeight, this._dotHeight];
         }
     },
 );
 
 export class RunningIndicators {
-    static DOT_SIZE = 30;
+    constructor(settings) {
+        this._settings = settings;
+    }
 
     ensureOverlay(item, iconSize = null) {
         const icon = item?.icon?.icon;
@@ -100,18 +103,9 @@ export class RunningIndicators {
         iconBin.child = overlay;
         overlay.add_child(icon);
 
-        const dotSize = RunningIndicators.DOT_SIZE;
+        const dot = new RunningDot(1, 1);
 
-        const dot = new RunningDot(dotSize);
-        dot.set_size(dotSize, dotSize);
-
-        const dotColor = getAverageAppIconColor(item.app);
-
-        const styles = [`border-radius: ${dotSize / 2}px;`];
-
-        if (dotColor) styles.push(`background-color: ${dotColor};`);
-
-        dot.set_style(styles.join(" "));
+        dot._chDotColor = getAverageAppIconColor(item.app);
 
         dot.clip_to_allocation = false;
         overlay.add_child(dot);
@@ -198,9 +192,35 @@ export class RunningIndicators {
         icon.set_position(0, 0);
         icon.set_size(size, size);
 
-        const dotSize = RunningIndicators.DOT_SIZE;
-        dot.set_size(dotSize, dotSize);
-        dot.set_position(Math.round(size - dotSize), 0);
+        const dotWidth = this._settings.get_int(
+            "app-grid-running-indicator-width",
+        );
+        const dotHeight = this._settings.get_int(
+            "app-grid-running-indicator-height",
+        );
+        const dotRadius = this._settings.get_int(
+            "app-grid-running-indicator-radius",
+        );
+        const horizontalPosition = this._settings.get_int(
+            "app-grid-running-indicator-position-x",
+        );
+        const verticalPosition = this._settings.get_int(
+            "app-grid-running-indicator-position-y",
+        );
+
+        dot._dotWidth = dotWidth;
+        dot._dotHeight = dotHeight;
+        dot.set_size(dotWidth, dotHeight);
+        dot.set_position(
+            Math.round(((size - dotWidth) * (horizontalPosition + 100)) / 200),
+            Math.round(((size - dotHeight) * (verticalPosition + 100)) / 200),
+        );
+        dot.set_style(
+            `border-radius: ${dotRadius}px;` +
+                (dot._chDotColor
+                    ? ` background-color: ${dot._chDotColor};`
+                    : ""),
+        );
 
         overlay.clip_to_allocation = false;
         icon.clip_to_allocation = false;

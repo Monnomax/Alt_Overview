@@ -27,8 +27,6 @@ export class IconInteractionController {
     static ICON_TEXTURE_OVERSAMPLE = 1.5;
 
     static ICON_SIZE = {
-        smallest: 60,
-        small: 70,
         normal: 80,
         large: 90,
         largest: 100,
@@ -43,7 +41,7 @@ export class IconInteractionController {
     constructor(settings, appDisplay) {
         this._settings = settings;
         this._appDisplay = appDisplay;
-        this._runningIndicators = new RunningIndicators();
+        this._runningIndicators = new RunningIndicators(settings);
 
         this._folderDragDiagnosticsController = new FolderDragDiagnostics(
             appDisplay,
@@ -76,6 +74,19 @@ export class IconInteractionController {
         this._openDesktopFileMenuChangedId = settings.connect(
             "changed::app-grid-show-open-desktop-file",
             () => this._updateOpenDesktopFileMenuItems(),
+        );
+        this._runningIndicatorSettingsChangedId = settings.connect(
+            "changed",
+            (_settings, key) => {
+                if (
+                    key === "app-grid-running-indicator-width" ||
+                    key === "app-grid-running-indicator-height" ||
+                    key === "app-grid-running-indicator-radius" ||
+                    key === "app-grid-running-indicator-position-x" ||
+                    key === "app-grid-running-indicator-position-y"
+                )
+                    this.updateRunningIndicators();
+            },
         );
     }
 
@@ -168,6 +179,34 @@ export class IconInteractionController {
                     processItem(item, true);
             } catch (_error) {
                 // FolderView може перебувати на етапі знищення.
+            }
+        }
+    }
+
+    updateRunningIndicators() {
+        const grid = this._appDisplay?._grid;
+        if (!grid) return;
+
+        const updateItem = (item) => {
+            if (item?._chRunningOverlay)
+                this._runningIndicators.ensureOverlay(item);
+        };
+
+        for (let index = 0; index < grid.get_n_children(); index++)
+            updateItem(grid.get_child_at_index(index));
+
+        for (const folderIcon of this._appDisplay._folderIcons ?? []) {
+            const folderView = folderIcon?.view;
+            if (!this._isActorUsable(folderView)) continue;
+
+            try {
+                for (const item of folderView.getAllItems?.() ?? [])
+                    updateItem(item);
+            } catch (error) {
+                logError(
+                    error,
+                    "Could not refresh running indicators in FolderView",
+                );
             }
         }
     }
@@ -337,6 +376,11 @@ export class IconInteractionController {
         if (this._openDesktopFileMenuChangedId) {
             this._settings.disconnect(this._openDesktopFileMenuChangedId);
             this._openDesktopFileMenuChangedId = 0;
+        }
+
+        if (this._runningIndicatorSettingsChangedId) {
+            this._settings.disconnect(this._runningIndicatorSettingsChangedId);
+            this._runningIndicatorSettingsChangedId = 0;
         }
 
         if (this._viewLoadedId) {

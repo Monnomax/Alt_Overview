@@ -233,10 +233,43 @@
             <description>Кількість рядків у сітці застосунків.</description>
         </key>
 
+        <key name="app-grid-running-indicator-width" type="i">
+            <range min="4" max="100" />
+            <default>30</default>
+            <summary>Ширина індикатора активних програм</summary>
+            <description>Ширина індикатора активної програми у пікселях.</description>
+        </key>
+
+        <key name="app-grid-running-indicator-height" type="i">
+            <range min="4" max="100" />
+            <default>30</default>
+            <summary>Висота індикатора активних програм</summary>
+            <description>Висота індикатора активної програми у пікселях.</description>
+        </key>
+
+        <key name="app-grid-running-indicator-radius" type="i">
+            <range min="0" max="50" />
+            <default>15</default>
+            <summary>Радіус кутів індикатора активних програм</summary>
+            <description>Радіус заокруглення кутів індикатора у пікселях.</description>
+        </key>
+
+        <key name="app-grid-running-indicator-position-x" type="i">
+            <range min="-100" max="100" />
+            <default>100</default>
+            <summary>Позиція індикатора активних програм по горизонталі</summary>
+            <description>-100 — лівий край, 0 — центр, 100 — правий край значка.</description>
+        </key>
+
+        <key name="app-grid-running-indicator-position-y" type="i">
+            <range min="-100" max="100" />
+            <default>-100</default>
+            <summary>Позиція індикатора активних програм по вертикалі</summary>
+            <description>-100 — верхній край, 0 — центр, 100 — нижній край значка.</description>
+        </key>
+
         <key name="app-grid-icon-size" type="s">
             <choices>
-                <choice value="smallest" />
-                <choice value="small" />
                 <choice value="normal" />
                 <choice value="large" />
                 <choice value="largest" />
@@ -245,8 +278,7 @@
             <summary>Розмір іконок сітки програм</summary>
             <description>
                 Розмір іконок відносно розміру, автоматично визначеного GNOME:
-                "smallest" — 80%, "small" — 90%, "normal" — 100%,
-                "large" — 110%, "largest" — 120%.
+                "normal" — 100%, "large" — 110%, "largest" — 120%.
             </description>
         </key>
 
