@@ -255,17 +255,17 @@
         </key>
 
         <key name="app-grid-running-indicator-position-x" type="i">
-            <range min="-100" max="100" />
+            <range min="-150" max="150" />
             <default>100</default>
             <summary>Позиція індикатора активних програм по горизонталі</summary>
-            <description>-100 — лівий край, 0 — центр, 100 — правий край значка.</description>
+            <description>-150 — лівий край, 0 — центр, 150 — правий край значка.</description>
         </key>
 
         <key name="app-grid-running-indicator-position-y" type="i">
-            <range min="-100" max="100" />
-            <default>-100</default>
+            <range min="-150" max="150" />
+            <default>-150</default>
             <summary>Позиція індикатора активних програм по вертикалі</summary>
-            <description>-100 — верхній край, 0 — центр, 100 — нижній край значка.</description>
+            <description>-150 — верхній край, 0 — центр, 150 — нижній край значка.</description>
         </key>
 
         <key name="app-grid-icon-size" type="s">

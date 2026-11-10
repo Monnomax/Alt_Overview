@@ -649,8 +649,8 @@ export default class OverviewBackgroundPreferences extends ExtensionPreferences 
             [_("Ширина"), "app-grid-running-indicator-width", 4, 100],
             [_("Висота"), "app-grid-running-indicator-height", 4, 100],
             [_("Радіус кутів"), "app-grid-running-indicator-radius", 0, 50],
-            [_("Позиція по горизонталі"), "app-grid-running-indicator-position-x", -100, 100],
-            [_("Позиція по вертикалі"), "app-grid-running-indicator-position-y", -100, 100],
+            [_("Позиція по горизонталі"), "app-grid-running-indicator-position-x", -150, 150],
+            [_("Позиція по вертикалі"), "app-grid-running-indicator-position-y", -150, 150],
         ]) {
             const row = new Adw.ActionRow({
                 title,
