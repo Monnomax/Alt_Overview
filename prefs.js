@@ -20,8 +20,8 @@ const APP_GRID_NAMES_VISIBILITY = ["always", "never", "hover"];
 
 // Індекси відповідають порядку рядків у Gtk.StringList для рядка
 // "Розмір" у групі "Іконки" — значення в px застосовуються
-// у src/iconInteractionController.js.
-const APP_GRID_ICON_SIZE = ["normal", "large", "largest"];
+// в extension.js (див. ICON_SIZE_PX там же).
+const APP_GRID_ICON_SIZE = ["smallest", "small", "normal", "large", "largest"];
 
 const APP_GRID_ORDER = [
     "manual",
@@ -75,9 +75,7 @@ export default class OverviewBackgroundPreferences extends ExtensionPreferences 
         const levels = ["off", "errors", "normal", "verbose"];
         const levelRow = new Adw.ActionRow({
             title: _("Рівень подробиць"),
-            subtitle: _(
-                "Докладний режим додає події переходів і стану компонентів.",
-            ),
+            subtitle: _("Докладний режим додає події переходів і стану компонентів."),
         });
         const levelDropdown = new Gtk.DropDown({
             model: new Gtk.StringList({
@@ -92,9 +90,7 @@ export default class OverviewBackgroundPreferences extends ExtensionPreferences 
         });
 
         const refreshLevel = () => {
-            const index = levels.indexOf(
-                settings.get_string("diagnostics-level"),
-            );
+            const index = levels.indexOf(settings.get_string("diagnostics-level"));
             levelDropdown.set_selected(index >= 0 ? index : 1);
         };
         refreshLevel();
@@ -107,9 +103,7 @@ export default class OverviewBackgroundPreferences extends ExtensionPreferences 
             "changed::diagnostics-level",
             refreshLevel,
         );
-        levelDropdown.connect("destroy", () =>
-            settings.disconnect(levelChangedId),
-        );
+        levelDropdown.connect("destroy", () => settings.disconnect(levelChangedId));
         levelRow.add_suffix(levelDropdown);
         loggingGroup.add(levelRow);
 
@@ -125,9 +119,7 @@ export default class OverviewBackgroundPreferences extends ExtensionPreferences 
             title: _("Останній знімок стану"),
             subtitle: this._formatDiagnosticValue(
                 settings.get_string("diagnostics-last-runtime-state"),
-                _(
-                    "Знімка ще немає — відкрийте «Огляд» після ввімкнення розширення.",
-                ),
+                _("Знімка ще немає — відкрийте «Огляд» після ввімкнення розширення."),
             ),
             subtitle_lines: 5,
         });
@@ -156,9 +148,9 @@ export default class OverviewBackgroundPreferences extends ExtensionPreferences 
             const display = Gdk.Display.get_default();
             if (!display) return;
 
-            display
-                .get_clipboard()
-                .set_text(this._buildDiagnosticsReport(settings));
+            display.get_clipboard().set_text(
+                this._buildDiagnosticsReport(settings),
+            );
             copyButton.label = _("Скопійовано");
         });
         copyRow.add_suffix(copyButton);
@@ -167,9 +159,7 @@ export default class OverviewBackgroundPreferences extends ExtensionPreferences 
         const refreshStoredValues = () => {
             stateRow.subtitle = this._formatDiagnosticValue(
                 settings.get_string("diagnostics-last-runtime-state"),
-                _(
-                    "Знімка ще немає — відкрийте «Огляд» після ввімкнення розширення.",
-                ),
+                _("Знімка ще немає — відкрийте «Огляд» після ввімкнення розширення."),
             );
             errorRow.subtitle = this._formatDiagnosticError(
                 settings.get_string("diagnostics-last-error"),
@@ -253,10 +243,7 @@ export default class OverviewBackgroundPreferences extends ExtensionPreferences 
             "diagnostics-level",
         ];
         const configuration = Object.fromEntries(
-            settingKeys.map((key) => [
-                key,
-                settings.get_value(key).deep_unpack(),
-            ]),
+            settingKeys.map((key) => [key, settings.get_value(key).deep_unpack()]),
         );
         const osName = GLib.get_os_info("PRETTY_NAME") ?? _("недоступно");
 
@@ -331,15 +318,11 @@ export default class OverviewBackgroundPreferences extends ExtensionPreferences 
         const blurRow = new Adw.ActionRow({
             title: _("Розмиття"),
         });
-        const blurControl = this._buildSettingsButtonRegulator(
-            settings,
-            "blur",
-            {
-                lower: 0,
-                upper: 100,
-                step: 5,
-            },
-        );
+        const blurControl = this._buildSettingsButtonRegulator(settings, "blur", {
+            lower: 0,
+            upper: 100,
+            step: 5,
+        });
         blurRow.add_suffix(blurControl.button);
         enableRow.add_row(blurRow);
 
@@ -359,15 +342,11 @@ export default class OverviewBackgroundPreferences extends ExtensionPreferences 
         const grainRow = new Adw.ActionRow({
             title: _("Зернистість"),
         });
-        const grainControl = this._buildSettingsButtonRegulator(
-            settings,
-            "grain",
-            {
-                lower: 0,
-                upper: 100,
-                step: 5,
-            },
-        );
+        const grainControl = this._buildSettingsButtonRegulator(settings, "grain", {
+            lower: 0,
+            upper: 100,
+            step: 5,
+        });
         grainRow.add_suffix(grainControl.button);
         enableRow.add_row(grainRow);
         group.add(enableRow);
@@ -407,10 +386,11 @@ export default class OverviewBackgroundPreferences extends ExtensionPreferences 
             }),
             valign: Gtk.Align.CENTER,
         });
-        const currentSearchEntryMode = settings.get_string("search-entry-mode");
-        const currentSearchEntryModeIndex = SEARCH_ENTRY_MODES.indexOf(
-            currentSearchEntryMode,
+        const currentSearchEntryMode = settings.get_string(
+            "search-entry-mode",
         );
+        const currentSearchEntryModeIndex =
+            SEARCH_ENTRY_MODES.indexOf(currentSearchEntryMode);
         searchDropdown.set_selected(
             currentSearchEntryModeIndex >= 0 ? currentSearchEntryModeIndex : 0,
         );
@@ -645,17 +625,15 @@ export default class OverviewBackgroundPreferences extends ExtensionPreferences 
         });
         page.add(runningIndicatorGroup);
 
-        for (const [title, settingsKey, lower, upper, subtitle] of [
+        for (const [title, settingsKey, lower, upper] of [
             [_("Ширина"), "app-grid-running-indicator-width", 4, 100],
             [_("Висота"), "app-grid-running-indicator-height", 4, 100],
-            [_("Радіус кутів"), "app-grid-running-indicator-radius", 0, 50],
+            [_("Кількість кутів"), "app-grid-running-indicator-corners", 3, 12],
+            [_("Заокруглення вершин"), "app-grid-running-indicator-radius", 0, 50],
             [_("Позиція по горизонталі"), "app-grid-running-indicator-position-x", -150, 150],
             [_("Позиція по вертикалі"), "app-grid-running-indicator-position-y", -150, 150],
         ]) {
-            const row = new Adw.ActionRow({
-                title,
-                ...(subtitle ? { subtitle } : {}),
-            });
+            const row = new Adw.ActionRow({ title });
             const control = this._buildSettingsButtonRegulator(
                 settings,
                 settingsKey,
@@ -664,6 +642,22 @@ export default class OverviewBackgroundPreferences extends ExtensionPreferences 
             row.add_suffix(control.button);
             runningIndicatorGroup.add(row);
         }
+
+        const dynamicColorRow = new Adw.ActionRow({
+            title: _("Динамічний колір"),
+        });
+        const dynamicColorSwitch = new Gtk.Switch({
+            valign: Gtk.Align.CENTER,
+        });
+        settings.bind(
+            "app-grid-running-indicator-dynamic-color",
+            dynamicColorSwitch,
+            "active",
+            Gio.SettingsBindFlags.DEFAULT,
+        );
+        dynamicColorRow.add_suffix(dynamicColorSwitch);
+        dynamicColorRow.activatable_widget = dynamicColorSwitch;
+        runningIndicatorGroup.add(dynamicColorRow);
 
         const iconSizeGroup = new Adw.PreferencesGroup({
             title: _("Іконки"),
@@ -675,7 +669,13 @@ export default class OverviewBackgroundPreferences extends ExtensionPreferences 
         });
         const iconSizeDropdown = new Gtk.DropDown({
             model: new Gtk.StringList({
-                strings: [_("Малий"), _("Середній"), _("Великий")],
+                strings: [
+                    _("Найменший"),
+                    _("Малий"),
+                    _("Звичайний"),
+                    _("Великий"),
+                    _("Найбільший"),
+                ],
             }),
             valign: Gtk.Align.CENTER,
         });
@@ -684,7 +684,7 @@ export default class OverviewBackgroundPreferences extends ExtensionPreferences 
         const currentIconSizeIndex =
             APP_GRID_ICON_SIZE.indexOf(currentIconSizeValue);
         iconSizeDropdown.set_selected(
-            currentIconSizeIndex >= 0 ? currentIconSizeIndex : 0,
+            currentIconSizeIndex >= 0 ? currentIconSizeIndex : 2,
         );
 
         iconSizeDropdown.connect("notify::selected", () => {
@@ -905,11 +905,9 @@ export default class OverviewBackgroundPreferences extends ExtensionPreferences 
     // створює окрему групу "Орієнтація"; сітка програм додає рядок до
     // наявної групи "Розкладка".
     _addScrollDirectionGroup(page, settings, settingsKey, targetGroup = null) {
-        const group =
-            targetGroup ??
-            new Adw.PreferencesGroup({
-                title: _("Орієнтація"),
-            });
+        const group = targetGroup ?? new Adw.PreferencesGroup({
+            title: _("Орієнтація"),
+        });
         if (!targetGroup) page.add(group);
 
         const row = new Adw.ActionRow({
@@ -1168,35 +1166,22 @@ export default class OverviewBackgroundPreferences extends ExtensionPreferences 
     // Один ActionRow-кнопка-регулятор масштабу іконки (0.50–1.50).
     _buildIconScaleRow(settings, { title, settingsKey }) {
         const row = new Adw.ActionRow({ title });
-        const regulator = this._buildSettingsButtonRegulator(
-            settings,
-            settingsKey,
-            {
-                lower: 0.5,
-                upper: 1.5,
-                step: 0.01,
-                digits: 2,
-                double: true,
-            },
-        );
+        const regulator = this._buildSettingsButtonRegulator(settings, settingsKey, {
+            lower: 0.5,
+            upper: 1.5,
+            step: 0.01,
+            digits: 2,
+            double: true,
+        });
         row.add_suffix(regulator.button);
         return row;
     }
 
     // Створює кнопку-регулятор із таким самим виглядом та керуванням
     // прокручуванням, як у Panel Modifier.
-    _buildButtonRegulator({
-        getValue,
-        setValue,
-        lower,
-        upper,
-        step = 1,
-        digits = 0,
-    }) {
+    _buildButtonRegulator({ getValue, setValue, lower, upper, step = 1, digits = 0 }) {
         const format = (value) =>
-            digits > 0
-                ? Number(value).toFixed(digits)
-                : String(Math.round(value));
+            digits > 0 ? Number(value).toFixed(digits) : String(Math.round(value));
 
         const button = new Gtk.Button({
             label: format(getValue()),
@@ -1255,9 +1240,7 @@ export default class OverviewBackgroundPreferences extends ExtensionPreferences 
         const changedId = settings.connect(`changed::${settingsKey}`, () => {
             regulator.refresh();
         });
-        regulator.button.connect("destroy", () =>
-            settings.disconnect(changedId),
-        );
+        regulator.button.connect("destroy", () => settings.disconnect(changedId));
 
         return regulator;
     }

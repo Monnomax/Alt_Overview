@@ -27,6 +27,8 @@ export class IconInteractionController {
     static ICON_TEXTURE_OVERSAMPLE = 1.5;
 
     static ICON_SIZE = {
+        smallest: 60,
+        small: 70,
         normal: 80,
         large: 90,
         largest: 100,
@@ -74,19 +76,6 @@ export class IconInteractionController {
         this._openDesktopFileMenuChangedId = settings.connect(
             "changed::app-grid-show-open-desktop-file",
             () => this._updateOpenDesktopFileMenuItems(),
-        );
-        this._runningIndicatorSettingsChangedId = settings.connect(
-            "changed",
-            (_settings, key) => {
-                if (
-                    key === "app-grid-running-indicator-width" ||
-                    key === "app-grid-running-indicator-height" ||
-                    key === "app-grid-running-indicator-radius" ||
-                    key === "app-grid-running-indicator-position-x" ||
-                    key === "app-grid-running-indicator-position-y"
-                )
-                    this.updateRunningIndicators();
-            },
         );
     }
 
@@ -179,34 +168,6 @@ export class IconInteractionController {
                     processItem(item, true);
             } catch (_error) {
                 // FolderView може перебувати на етапі знищення.
-            }
-        }
-    }
-
-    updateRunningIndicators() {
-        const grid = this._appDisplay?._grid;
-        if (!grid) return;
-
-        const updateItem = (item) => {
-            if (item?._chRunningOverlay)
-                this._runningIndicators.ensureOverlay(item);
-        };
-
-        for (let index = 0; index < grid.get_n_children(); index++)
-            updateItem(grid.get_child_at_index(index));
-
-        for (const folderIcon of this._appDisplay._folderIcons ?? []) {
-            const folderView = folderIcon?.view;
-            if (!this._isActorUsable(folderView)) continue;
-
-            try {
-                for (const item of folderView.getAllItems?.() ?? [])
-                    updateItem(item);
-            } catch (error) {
-                logError(
-                    error,
-                    "Could not refresh running indicators in FolderView",
-                );
             }
         }
     }
@@ -378,11 +339,6 @@ export class IconInteractionController {
             this._openDesktopFileMenuChangedId = 0;
         }
 
-        if (this._runningIndicatorSettingsChangedId) {
-            this._settings.disconnect(this._runningIndicatorSettingsChangedId);
-            this._runningIndicatorSettingsChangedId = 0;
-        }
-
         if (this._viewLoadedId) {
             this._appDisplay.disconnect(this._viewLoadedId);
             this._viewLoadedId = 0;
@@ -411,13 +367,13 @@ export class IconInteractionController {
                             : null;
 
                     if (label) {
-                item._chLabelOpacityGeneration =
-                    (item._chLabelOpacityGeneration ?? 0) + 1;
+                        item._chLabelOpacityGeneration =
+                            (item._chLabelOpacityGeneration ?? 0) + 1;
 
-                label.remove_transition("opacity");
-                label.opacity = 255;
-                label.visible = true;
-            }
+                        label.remove_transition("opacity");
+                        label.opacity = 255;
+                        label.visible = true;
+                    }
                 }
 
                 if (item._chFolderLongPressGesture) {
@@ -575,6 +531,22 @@ export class IconInteractionController {
             item._chLeftClickGesture = null;
             item._chLeftClickGestureActor = null;
 
+            if (item._chDndGesture) {
+                const gesture = item._chDndGesture;
+                const gestureActor = item._chDndGestureActor;
+
+                this._removeActionSafely(gestureActor, gesture);
+
+                try {
+                    item.add_action(gesture);
+                } catch (_error) {
+                    // AppIcon може вже завершувати знищення.
+                }
+
+                item._chDndGesture = null;
+                item._chDndGestureActor = null;
+            }
+
             if (item._chDndReactiveLockId) {
                 try {
                     item._draggable?.disconnect(item._chDndReactiveLockId);
@@ -587,11 +559,6 @@ export class IconInteractionController {
 
             item.reactive = true;
             item.track_hover = true;
-
-            if (item._chOriginalButtonMask !== undefined) {
-                item.button_mask = item._chOriginalButtonMask;
-                item._chOriginalButtonMask = undefined;
-            }
 
             if (icon) icon.reactive = false;
 
@@ -1103,13 +1070,6 @@ export class IconInteractionController {
         const isFolder = item.has_style_class_name?.("app-folder") === true;
 
         if (!isFolder) {
-            if (item._chOriginalButtonMask === undefined)
-                item._chOriginalButtonMask = item.button_mask;
-            // Custom gestures handle clicks instead of St.Button.
-            item.button_mask = 0;
-        }
-
-        if (!isFolder) {
             this._ensureLabelOverlay(item);
             this._ensureOpenDesktopFileMenuHook(item);
         }
@@ -1135,7 +1095,7 @@ export class IconInteractionController {
         }
 
         if (item._chHoverInteractionInstalled && item._chHoverIcon === icon) {
-            item.reactive = true;
+            item.reactive = isFolder;
             item.track_hover = false;
             icon.reactive = true;
 
@@ -1172,13 +1132,18 @@ export class IconInteractionController {
                 item._chMiddleClickGesture = null;
                 item._chMiddleClickGestureActor = null;
             }
+
+            if (item._chDndGestureActor === oldIcon)
+                item._chDndGestureActor = null;
         }
 
         item._chHoverInteractionInstalled = true;
         item._chHoverIcon = icon;
 
-        // Keep the native DND action on the actor that owns its Draggable.
-        item.reactive = true;
+        item.reactive = isFolder;
+        item.track_hover = false;
+
+        item.reactive = isFolder;
         item.track_hover = false;
 
         icon.reactive = true;
@@ -1231,6 +1196,23 @@ export class IconInteractionController {
             item._chMiddleClickGestureActor = icon;
         }
 
+        const dragGesture = item?._draggable?.startGesture;
+
+        /*
+         * FolderIcon is already reactive. Keep its native DND gesture
+         * attached to the AppViewItem that owns the Draggable.
+         *
+         * Regular AppIcons remain unchanged: their gesture is moved to
+         * the inner icon because their parent actor is non-reactive.
+         */
+        if (dragGesture && !isFolder) {
+            item.remove_action(dragGesture);
+            icon.add_action(dragGesture);
+
+            item._chDndGesture = dragGesture;
+            item._chDndGestureActor = icon;
+        }
+
         if (item._draggable && !item._chDndReactiveLockId) {
             const draggable = item._draggable;
 
@@ -1244,7 +1226,7 @@ export class IconInteractionController {
                     return;
 
                 try {
-                    item.reactive = true;
+                    item.reactive = isFolder;
                     item.track_hover = false;
                 } catch (_error) {
                     // The source actor may be entering teardown.
@@ -1374,8 +1356,8 @@ export class IconInteractionController {
 
         item._chPressHandlerId = item.connect("notify::pressed", () => {
             /*
-             * pressed належить усій плитці.
-             * Анімуємо лише під час наведення на графічну іконку.
+             * pressed належить усій плитці 150x150.
+             * Анімацію запускаємо лише над графічною іконкою.
              */
             if (
                 this._isActorUsable(item) &&
