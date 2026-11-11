@@ -63,10 +63,18 @@ export class IconAnimator {
      * @param {string} opts.curveName - ключ з ICON_ANIMATION_CURVES
      * @param {number} opts.inDuration - тривалість (мс) переходу в активний стан
      * @param {number} opts.outDuration - тривалість (мс) переходу назад
+     * @param {number|null} opts.startScale - необов'язковий початковий множник масштабу
      */
     static scale(
         actor,
-        { active, targetScale, curveName, inDuration, outDuration },
+        {
+            active,
+            targetScale,
+            curveName,
+            inDuration,
+            outDuration,
+            startScale = null,
+        },
     ) {
         if (!actor || actor.is_destroyed?.()) return;
 
@@ -90,6 +98,15 @@ export class IconAnimator {
 
         const scale = baseScale * animationScale;
 
+        if (
+            active &&
+            Number.isFinite(startScale) &&
+            startScale > 0
+        ) {
+            const initialScale = baseScale * startScale;
+            actor.set_scale(initialScale, initialScale);
+        }
+
         actor.ease({
             scale_x: scale,
             scale_y: scale,
@@ -104,5 +121,6 @@ export class IconAnimator {
         if (!actor || actor.is_destroyed?.()) return;
         actor.remove_all_transitions();
         actor.set_scale(1.0, 1.0);
+        actor.opacity = 255;
     }
 }

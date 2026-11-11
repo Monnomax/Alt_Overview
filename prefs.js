@@ -24,6 +24,7 @@ const APP_GRID_ANIMATION_DIRECTIONS = [
     "top-to-bottom",
     "right-to-left",
     "bottom-to-top",
+    "grow-in-place",
 ];
 
 // Індекси відповідають порядку рядків у Gtk.StringList для рядка
@@ -673,7 +674,7 @@ export default class OverviewBackgroundPreferences extends ExtensionPreferences 
         page.add(animationGroup);
 
         const animationRow = new Adw.ActionRow({
-            title: _("Напрямок появи"),
+            title: _("Спосіб появи"),
         });
         const animationDropdown = new Gtk.DropDown({
             model: new Gtk.StringList({
@@ -682,6 +683,7 @@ export default class OverviewBackgroundPreferences extends ExtensionPreferences 
                     _("Зверху вниз"),
                     _("Справа наліво"),
                     _("Знизу вгору"),
+                    _("Збільшення на місці"),
                 ],
             }),
             valign: Gtk.Align.CENTER,

@@ -224,6 +224,9 @@ export class ControlsLayoutPatch {
                             case "right-to-left":
                                 x = layoutBox.x2;
                                 break;
+                            case "grow-in-place":
+                                // Keep AppDisplay at its final full-screen position.
+                                break;
                             default:
                                 return appDisplayBox;
                         }

@@ -1,5 +1,6 @@
 import Pango from "gi://Pango";
 import GLib from "gi://GLib";
+import Meta from "gi://Meta";
 import Clutter from "gi://Clutter";
 import Gio from "gi://Gio";
 import GObject from "gi://GObject";
@@ -7,6 +8,7 @@ import { InjectionManager } from "resource:///org/gnome/shell/extensions/extensi
 import { FolderView } from "resource:///org/gnome/shell/ui/appDisplay.js";
 import * as PopupMenu from "resource:///org/gnome/shell/ui/popupMenu.js";
 import * as Main from "resource:///org/gnome/shell/ui/main.js";
+import { ControlsState } from "resource:///org/gnome/shell/ui/overviewControls.js";
 import { IconAnimator } from "./iconAnimations.js";
 import { RunningIndicators } from "./runningIndicators.js";
 import { FolderDragDiagnostics } from "./folderDragDiagnostics.js";
@@ -184,9 +186,31 @@ export class IconInteractionController {
             },
         );
 
-        this._viewLoadedId = appDisplay.connect("view-loaded", () =>
-            this.updateNamesVisibility(),
+        this._controls = Main.overview?._overview?._controls ?? null;
+        this._stateAdjustment = this._controls?._stateAdjustment ?? null;
+        this._gridEntrancePending = false;
+        this._gridEntranceShown = false;
+        this._gridEntranceLaterId = 0;
+        this._overviewStateChangedId = this._stateAdjustment?.connect(
+            "notify::value",
+            () => this._onOverviewStateChanged(),
+        ) ?? 0;
+        this._gridEntranceDirectionChangedId = settings.connect(
+            "changed::app-grid-animation-direction",
+            () => this._onOverviewStateChanged(),
         );
+        this._appDisplayVisibleId = appDisplay.connect(
+            "notify::visible",
+            () => this._onAppDisplayVisibilityChanged(),
+        );
+        this._viewLoadedId = appDisplay.connect("view-loaded", () => {
+            this.updateNamesVisibility();
+            this._schedulePendingGridEntrance();
+        });
+
+        this._onOverviewStateChanged();
+        if (appDisplay.visible)
+            this._onAppDisplayVisibilityChanged();
 
         this._openDesktopFileMenuChangedId = settings.connect(
             "changed::app-grid-show-open-desktop-file",
@@ -472,6 +496,22 @@ export class IconInteractionController {
             this._appDisplay.disconnect(this._viewLoadedId);
             this._viewLoadedId = 0;
         }
+
+        if (this._appDisplayVisibleId) {
+            this._appDisplay.disconnect(this._appDisplayVisibleId);
+            this._appDisplayVisibleId = 0;
+        }
+        if (this._overviewStateChangedId && this._stateAdjustment) {
+            this._stateAdjustment.disconnect(this._overviewStateChangedId);
+            this._overviewStateChangedId = 0;
+        }
+        if (this._gridEntranceDirectionChangedId) {
+            this._settings.disconnect(this._gridEntranceDirectionChangedId);
+            this._gridEntranceDirectionChangedId = 0;
+        }
+        this._gridEntrancePending = false;
+        this._gridEntranceShown = false;
+        this._cancelPendingGridEntrance();
 
         for (const item of items) {
             if (!item || !this._isActorUsable(item)) continue;
@@ -779,6 +819,14 @@ export class IconInteractionController {
         const animationActor =
             overlay && this._isActorUsable(overlay) ? overlay : icon;
 
+        if (animationActor._chGridEntranceOpacityPending) {
+            animationActor._chGridEntranceGeneration =
+                (animationActor._chGridEntranceGeneration ?? 0) + 1;
+            animationActor.remove_transition("opacity");
+            animationActor.opacity = 255;
+            animationActor._chGridEntranceOpacityPending = false;
+        }
+
         const active =
             activeOverride !== null
                 ? activeOverride
@@ -806,6 +854,180 @@ export class IconInteractionController {
                 curveName,
             ),
         });
+    }
+
+    _cancelPendingGridEntrance() {
+        if (!this._gridEntranceLaterId) return;
+
+        try {
+            global.compositor?.get_laters?.()?.remove(
+                this._gridEntranceLaterId,
+            );
+        } catch (_error) {
+            // The compositor may already be tearing down.
+        }
+
+        this._gridEntranceLaterId = 0;
+    }
+
+    _schedulePendingGridEntrance() {
+        if (
+            !this._gridEntrancePending ||
+            this._gridEntranceLaterId ||
+            !this._appDisplay?.visible ||
+            this._controls?._searchController?.searchActive
+        )
+            return;
+
+        const laters = global.compositor?.get_laters?.();
+        if (!laters) {
+            this._animatePendingGridEntrance();
+            return;
+        }
+
+        this._gridEntranceLaterId = laters.add(
+            Meta.LaterType.BEFORE_REDRAW,
+            () => {
+                this._gridEntranceLaterId = 0;
+                this._animatePendingGridEntrance();
+                return GLib.SOURCE_REMOVE;
+            },
+        );
+    }
+
+    _onOverviewStateChanged() {
+        const state = this._stateAdjustment?.getStateTransitionParams?.();
+        const shouldAnimate =
+            state?.finalState === ControlsState.APP_GRID &&
+            this._settings.get_string("app-grid-animation-direction") ===
+                "grow-in-place";
+
+        if (!shouldAnimate) {
+            this._gridEntrancePending = false;
+            this._gridEntranceShown = false;
+            this._cancelPendingGridEntrance();
+            return;
+        }
+
+        if (this._gridEntranceShown) return;
+
+        this._gridEntrancePending = true;
+        if (
+            this._appDisplay?.visible &&
+            !this._controls?._searchController?.searchActive
+        )
+            this._schedulePendingGridEntrance();
+    }
+
+    _onAppDisplayVisibilityChanged() {
+        if (!this._appDisplay?.visible) {
+            this._cancelPendingGridEntrance();
+            return;
+        }
+
+        this._onOverviewStateChanged();
+    }
+
+    _animatePendingGridEntrance() {
+        if (!this._gridEntrancePending) return;
+
+        const appDisplay = this._appDisplay;
+        const state = this._stateAdjustment?.getStateTransitionParams?.();
+        if (
+            state?.finalState !== ControlsState.APP_GRID ||
+            this._settings.get_string("app-grid-animation-direction") !==
+                "grow-in-place"
+        ) {
+            this._gridEntrancePending = false;
+            this._gridEntranceShown = false;
+            this._cancelPendingGridEntrance();
+            return;
+        }
+
+        if (
+            !appDisplay?.visible ||
+            this._controls?._searchController?.searchActive
+        )
+            return;
+
+        const grid = appDisplay._grid;
+        if (!grid) return;
+
+        const currentPage = Number.isInteger(grid.currentPage)
+            ? grid.currentPage
+            : 0;
+        const pageItems = grid.getItemsAtPage?.(currentPage);
+        const items =
+            Array.isArray(pageItems) && pageItems.length > 0
+                ? pageItems
+                : Array.from(
+                      { length: grid.get_n_children() },
+                      (_, index) => grid.get_child_at_index(index),
+                  );
+
+        if (items.length === 0) return;
+
+        const curveName = this._settings.get_string(
+            "app-grid-icon-hover-curve",
+        );
+        const duration = this._getCurveDuration(
+            "app-grid-icon-hover-in-durations",
+            curveName,
+        );
+
+        let animated = false;
+
+        for (const item of items) {
+            if (!this._isActorUsable(item) || item.visible === false)
+                continue;
+
+            const baseIcon = item.icon;
+            const icon = baseIcon?.icon;
+            if (!this._isActorUsable(icon)) continue;
+
+            const overlay = item._chRunningOverlay;
+            const animationActor =
+                overlay && this._isActorUsable(overlay) ? overlay : icon;
+
+            const generation =
+                (animationActor._chGridEntranceGeneration ?? 0) + 1;
+            animationActor._chGridEntranceGeneration = generation;
+            animationActor._chGridEntranceOpacityPending = true;
+            animationActor.opacity = 0;
+
+            IconAnimator.scale(animationActor, {
+                active: true,
+                targetScale: 1.0,
+                curveName,
+                inDuration: duration,
+                outDuration: duration,
+                startScale: 0.5,
+            });
+
+            animationActor.ease({
+                opacity: 255,
+                mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+                duration,
+                onComplete: () => {
+                    if (
+                        !this._isActorUsable(animationActor) ||
+                        animationActor._chGridEntranceGeneration !==
+                            generation
+                    )
+                        return;
+
+                    animationActor._chGridEntranceOpacityPending = false;
+                    animationActor.opacity = 255;
+                },
+            });
+
+            animated = true;
+        }
+
+        if (animated) {
+            this._gridEntrancePending = false;
+            this._gridEntranceShown = true;
+        }
     }
 
     _getCurveDuration(key, curveName) {

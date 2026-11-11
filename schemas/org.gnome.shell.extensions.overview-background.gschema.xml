@@ -288,11 +288,13 @@
                 <choice value="top-to-bottom" />
                 <choice value="right-to-left" />
                 <choice value="bottom-to-top" />
+                <choice value="grow-in-place" />
             </choices>
             <default>"bottom-to-top"</default>
-            <summary>Напрямок появи сітки програм</summary>
-            <description>Визначає напрямок, з якого AppGrid з’являється на екрані. Під час
-                зникнення сітка рухається у зворотному напрямку.</description>
+            <summary>Спосіб появи сітки програм</summary>
+            <description>Визначає спосіб появи AppGrid: переміщенням із заданого напрямку або
+                збільшенням іконок на місці. Під час зникнення напрямні режими рухаються
+                у зворотному напрямку.</description>
         </key>
 
         <key name="app-grid-icon-size" type="s">
