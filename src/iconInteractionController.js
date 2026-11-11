@@ -1,4 +1,5 @@
 import Pango from "gi://Pango";
+import GLib from "gi://GLib";
 import Clutter from "gi://Clutter";
 import Gio from "gi://Gio";
 import GObject from "gi://GObject";
@@ -21,6 +22,120 @@ function openDesktopFileForIcon(item) {
     } catch (error) {
         logError(error, `Could not open desktop file: ${filename}`);
     }
+}
+
+
+function scheduleAppGridGeometryDump(controller, phase) {
+    if (!controller._chGeometryDumpPhases)
+        controller._chGeometryDumpPhases = new Set();
+
+    if (controller._chGeometryDumpPhases.has(phase))
+        return;
+
+    controller._chGeometryDumpPhases.add(phase);
+
+    const read = (fn, fallback = null) => {
+        try {
+            return fn();
+        } catch (_error) {
+            return fallback;
+        }
+    };
+
+    const round = value =>
+        Number.isFinite(value)
+            ? Math.round(value * 100) / 100
+            : null;
+
+    const pair = fn => {
+        const value = read(fn);
+        return value ? [round(value[0]), round(value[1])] : null;
+    };
+
+    const snapshot = (actor, tileY = null) => {
+        if (!actor) return null;
+
+        const stage = pair(() => actor.get_transformed_position());
+        const box = read(() => {
+            const b = actor.get_allocation_box();
+            return [
+                round(b.x1), round(b.y1),
+                round(b.x2), round(b.y2),
+            ];
+        });
+
+        return {
+            type: read(() => actor.constructor.name),
+            parent: read(() => actor.get_parent()?.constructor.name),
+            position: pair(() => actor.get_position()),
+            stagePosition: stage,
+            relativeY: stage && tileY !== null
+                ? round(stage[1] - tileY)
+                : null,
+            size: pair(() => actor.get_size()),
+            stageSize: pair(() => actor.get_transformed_size()),
+            allocation: box,
+            preferred: read(() =>
+                actor.get_preferred_size().map(round)
+            ),
+            yAlign: read(() => actor.y_align),
+            xAlign: read(() => actor.x_align),
+            yExpand: read(() => actor.y_expand),
+            translationY: round(read(() => actor.translation_y)),
+            scaleY: round(read(() => actor.scale_y)),
+            visible: read(() => actor.visible),
+            clip: read(() => actor.clip_to_allocation),
+        };
+    };
+
+    GLib.timeout_add(GLib.PRIORITY_DEFAULT, 800, () => {
+        const grid = controller._appDisplay?._grid;
+
+        if (!grid) {
+            console.log(
+                `[ALT_ICON_GEOMETRY] ${phase}: AppGrid unavailable`
+            );
+            return GLib.SOURCE_REMOVE;
+        }
+
+        const count = grid.get_n_children();
+
+        console.log(
+            `[ALT_ICON_GEOMETRY_BEGIN] phase=${phase} count=${count}`
+        );
+
+        for (let i = 0; i < count; i++) {
+            const item = grid.get_child_at_index(i);
+            if (!item) continue;
+
+            const tile = snapshot(item);
+            const tileY = tile?.stagePosition?.[1] ?? 0;
+            const base = item.icon;
+            const bin = base?._iconBin;
+
+            const record = {
+                phase,
+                index: i,
+                app: read(() => item.app.get_name(), "Unknown"),
+                item: tile,
+                iconContainer: snapshot(item._iconContainer, tileY),
+                baseIcon: snapshot(base, tileY),
+                iconBox: snapshot(base?._box, tileY),
+                iconBin: snapshot(bin, tileY),
+                binChild: snapshot(read(() => bin.get_child()), tileY),
+                overlay: snapshot(item._chRunningOverlay, tileY),
+                icon: snapshot(base?.icon, tileY),
+                label: snapshot(base?.label, tileY),
+            };
+
+            console.log(
+                `[ALT_ICON_GEOMETRY] ${JSON.stringify(record)}`
+            );
+        }
+
+        console.log(`[ALT_ICON_GEOMETRY_END] phase=${phase}`);
+        return GLib.SOURCE_REMOVE;
+    });
 }
 
 export class IconInteractionController {
@@ -268,8 +383,20 @@ export class IconInteractionController {
         icon.clip_to_allocation = false;
 
         if (iconBin) {
+            // Зберігаємо початкове вирівнювання лише один раз.
+            if (iconBin._chOriginalIconBinYAlign === undefined)
+                iconBin._chOriginalIconBinYAlign = iconBin.y_align;
+
             iconBin.clip_to_allocation = false;
             iconBin.y_align = Clutter.ActorAlign.CENTER;
+
+            // BaseIcon._box is a vertical BoxLayout.
+            // Expand _iconBin vertically so its own BinLayout
+            // can center the overlay inside the available height.
+            if (iconBin._chOriginalIconBinYExpand === undefined)
+                iconBin._chOriginalIconBinYExpand = iconBin.y_expand;
+
+            iconBin.y_expand = true;
         }
 
         baseIcon.clip_to_allocation = false;
@@ -280,6 +407,8 @@ export class IconInteractionController {
 
         if (!item.has_style_class_name?.("app-folder"))
             this._ensureLabelOverlay(item);
+
+        scheduleAppGridGeometryDump(this, "enabled");
     }
 
     disable() {
@@ -486,6 +615,22 @@ export class IconInteractionController {
                 // Індикатор може втратити свій актор під час teardown.
             }
 
+            // Відновлюємо початкове вертикальне вирівнювання GNOME.
+            if (
+                iconBin &&
+                iconBin._chOriginalIconBinYAlign !== undefined
+            ) {
+                iconBin.y_align = iconBin._chOriginalIconBinYAlign;
+                delete iconBin._chOriginalIconBinYAlign;
+
+                if (iconBin._chOriginalIconBinYExpand !== undefined) {
+                    iconBin.y_expand =
+                        iconBin._chOriginalIconBinYExpand;
+                    delete iconBin._chOriginalIconBinYExpand;
+                }
+                iconBin.queue_relayout();
+            }
+
             if (icon) {
                 IconAnimator.reset(icon);
 
@@ -615,6 +760,8 @@ export class IconInteractionController {
 
             item.z_position = 0;
         }
+
+        scheduleAppGridGeometryDump(this, "disabled");
     }
 
     _animate(item, kind, activeOverride = null) {
