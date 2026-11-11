@@ -1,4 +1,5 @@
 import Clutter from "gi://Clutter";
+import Meta from "gi://Meta";
 import St from "gi://St";
 
 export class AppGridNavigation {
@@ -23,6 +24,7 @@ export class AppGridNavigation {
         this._navigationButtonsChangedId = 0;
         this._originalNavigationButtonStates = [];
         this._navigation = null;
+        this._navigationPositionLaterId = 0;
         this._navigationButtonsSyncOwner = null;
         this._originalSyncIndicatorsVisibility = null;
         this._originalSyncIndicators = null;
@@ -505,6 +507,59 @@ export class AppGridNavigation {
     }
 
     _updateNavigationPosition() {
+        if (this._navigationPositionLaterId) return;
+
+        const laters = global.compositor?.get_laters?.();
+        if (!laters) {
+            this._applyNavigationPosition();
+            return;
+        }
+
+        let attempts = 0;
+        this._navigationPositionLaterId = laters.add(
+            Meta.LaterType.BEFORE_REDRAW,
+            () => {
+                const navigation = this._navigation;
+                const overlay = this._appDisplay?._chOverlayContainer;
+
+                if (
+                    !navigation ||
+                    !overlay ||
+                    navigation.is_destroyed?.() ||
+                    overlay.is_destroyed?.()
+                ) {
+                    this._navigationPositionLaterId = 0;
+                    return false;
+                }
+
+                const dimensions = [
+                    navigation.width,
+                    navigation.height,
+                    overlay.width,
+                    overlay.height,
+                ];
+                const hasAllocation = dimensions.every(
+                    value => Number.isFinite(value) && value > 0,
+                );
+
+                if (!hasAllocation) {
+                    // Wait for Clutter's first real allocation. A pointer hover
+                    // must not be needed to trigger the missing relayout.
+                    attempts++;
+                    if (attempts < 30) return true;
+
+                    this._navigationPositionLaterId = 0;
+                    return false;
+                }
+
+                this._applyNavigationPosition();
+                this._navigationPositionLaterId = 0;
+                return false;
+            },
+        );
+    }
+
+    _applyNavigationPosition() {
         const navigation = this._navigation;
         const overlay = this._appDisplay?._chOverlayContainer;
 
@@ -568,7 +623,6 @@ export class AppGridNavigation {
         navigation.translation_x = targetTranslationX;
         navigation.translation_y = targetTranslationY;
     }
-
     _updateNavigationButtonIcons(vertical) {
         if (this._previousButton) {
             this._previousButton.icon_name = vertical
@@ -662,6 +716,13 @@ export class AppGridNavigation {
 
         this._previousButton = null;
         this._nextButton = null;
+
+        if (this._navigationPositionLaterId) {
+            global.compositor?.get_laters?.()?.remove(
+                this._navigationPositionLaterId,
+            );
+            this._navigationPositionLaterId = 0;
+        }
 
         navigation.destroy();
         this._navigation = null;

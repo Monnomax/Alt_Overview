@@ -18,6 +18,14 @@ const SEARCH_ENTRY_MODES = ["always", "never", "typing"];
 // Індекси відповідають порядку рядків у Gtk.StringList нижче.
 const APP_GRID_NAMES_VISIBILITY = ["always", "never", "hover"];
 
+// Індекси відповідають порядку рядків у Gtk.StringList нижче.
+const APP_GRID_ANIMATION_DIRECTIONS = [
+    "left-to-right",
+    "top-to-bottom",
+    "right-to-left",
+    "bottom-to-top",
+];
+
 // Індекси відповідають порядку рядків у Gtk.StringList для рядка
 // "Розмір" у групі "Іконки" — значення в px застосовуються
 // в extension.js (див. ICON_SIZE_PX там же).
@@ -658,6 +666,57 @@ export default class OverviewBackgroundPreferences extends ExtensionPreferences 
         dynamicColorRow.add_suffix(dynamicColorSwitch);
         dynamicColorRow.activatable_widget = dynamicColorSwitch;
         runningIndicatorGroup.add(dynamicColorRow);
+
+        const animationGroup = new Adw.PreferencesGroup({
+            title: _("Стиль появи сітки"),
+        });
+        page.add(animationGroup);
+
+        const animationRow = new Adw.ActionRow({
+            title: _("Напрямок появи"),
+        });
+        const animationDropdown = new Gtk.DropDown({
+            model: new Gtk.StringList({
+                strings: [
+                    _("Зліва направо"),
+                    _("Зверху вниз"),
+                    _("Справа наліво"),
+                    _("Знизу вгору"),
+                ],
+            }),
+            valign: Gtk.Align.CENTER,
+        });
+
+        const currentAnimationDirection = APP_GRID_ANIMATION_DIRECTIONS.indexOf(
+            settings.get_string("app-grid-animation-direction"),
+        );
+        animationDropdown.set_selected(
+            currentAnimationDirection >= 0 ? currentAnimationDirection : 3,
+        );
+
+        animationDropdown.connect("notify::selected", () => {
+            const value =
+                APP_GRID_ANIMATION_DIRECTIONS[animationDropdown.selected] ??
+                "bottom-to-top";
+            if (settings.get_string("app-grid-animation-direction") !== value)
+                settings.set_string("app-grid-animation-direction", value);
+        });
+
+        const animationChangedId = settings.connect(
+            "changed::app-grid-animation-direction",
+            () => {
+                const value = settings.get_string("app-grid-animation-direction");
+                const index = APP_GRID_ANIMATION_DIRECTIONS.indexOf(value);
+                if (index >= 0 && index !== animationDropdown.selected)
+                    animationDropdown.set_selected(index);
+            },
+        );
+        animationDropdown.connect("destroy", () =>
+            settings.disconnect(animationChangedId),
+        );
+
+        animationRow.add_suffix(animationDropdown);
+        animationGroup.add(animationRow);
 
         const iconSizeGroup = new Adw.PreferencesGroup({
             title: _("Іконки"),
