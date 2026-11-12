@@ -4,6 +4,9 @@ import Meta from "gi://Meta";
 import { ControlsState } from "resource:///org/gnome/shell/ui/overviewControls.js";
 import { IconAnimator } from "./iconAnimations.js";
 
+// Matches GNOME Shell Overview.ANIMATION_TIME.
+const APP_GRID_EXIT_ANIMATION_DURATION = 250;
+
 export class IconGridEntranceController {
     constructor(
         settings,
@@ -20,6 +23,7 @@ export class IconGridEntranceController {
         this._getCurveDuration = getCurveDuration;
         this._pending = false;
         this._shown = false;
+        this._exiting = false;
         this._laterId = 0;
 
         this._stateChangedId =
@@ -93,10 +97,38 @@ export class IconGridEntranceController {
 
     _onOverviewStateChanged() {
         const state = this._stateAdjustment?.getStateTransitionParams?.();
-        const shouldAnimate =
-            state?.finalState === ControlsState.APP_GRID &&
+        const growInPlace =
             this._settings.get_string("app-grid-animation-direction") ===
-                "grow-in-place";
+            "grow-in-place";
+
+        const shouldAnimateExit =
+            growInPlace &&
+            this._shown &&
+            !this._exiting &&
+            state?.initialState === ControlsState.APP_GRID &&
+            state?.finalState === ControlsState.HIDDEN;
+
+        if (shouldAnimateExit) {
+            this._pending = false;
+            this._shown = false;
+            this._exiting = true;
+            this._cancelPending();
+            this._animateExit();
+            return;
+        }
+
+        if (state?.finalState === ControlsState.APP_GRID) {
+            this._exiting = false;
+            if (!this._shown) this._restoreExitActors();
+        } else if (
+            state?.finalState !== ControlsState.HIDDEN ||
+            !state?.transitioning
+        ) {
+            this._exiting = false;
+        }
+
+        const shouldAnimate =
+            state?.finalState === ControlsState.APP_GRID && growInPlace;
 
         if (!shouldAnimate) {
             this._pending = false;
@@ -122,6 +154,87 @@ export class IconGridEntranceController {
         }
 
         this._onOverviewStateChanged();
+    }
+
+    _animateExit() {
+        const appDisplay = this._appDisplay;
+        if (
+            !appDisplay?.visible ||
+            this._controls?._searchController?.searchActive
+        )
+            return;
+
+        const grid = appDisplay._grid;
+        if (!grid) return;
+
+        const currentPage = Number.isInteger(grid.currentPage)
+            ? grid.currentPage
+            : 0;
+        const pageItems = grid.getItemsAtPage?.(currentPage);
+        const items =
+            Array.isArray(pageItems) && pageItems.length > 0
+                ? pageItems
+                : Array.from({ length: grid.get_n_children() }, (_, index) =>
+                      grid.get_child_at_index(index),
+                  );
+
+        for (const item of items) {
+            if (!this._isActorUsable(item) || item.visible === false) continue;
+
+            const baseIcon = item.icon;
+            const icon = baseIcon?.icon;
+            if (!this._isActorUsable(icon)) continue;
+
+            const overlay = item._chRunningOverlay;
+            const animationActor =
+                overlay && this._isActorUsable(overlay) ? overlay : icon;
+
+            const generation =
+                (animationActor._chGridEntranceGeneration ?? 0) + 1;
+            animationActor._chGridEntranceGeneration = generation;
+            animationActor._chGridEntranceOpacityPending = false;
+            animationActor._chGridExitPending = true;
+
+            IconAnimator.scale(animationActor, {
+                active: true,
+                targetScale: 0.5,
+                curveName: "Quad",
+                inDuration: APP_GRID_EXIT_ANIMATION_DURATION,
+                outDuration: APP_GRID_EXIT_ANIMATION_DURATION,
+                startScale: 1.0,
+            });
+
+            animationActor.ease({
+                opacity: 0,
+                mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+                duration: APP_GRID_EXIT_ANIMATION_DURATION,
+            });
+        }
+    }
+
+    _restoreExitActors() {
+        const grid = this._appDisplay?._grid;
+        if (!grid) return;
+
+        for (let index = 0; index < grid.get_n_children(); index++) {
+            const item = grid.get_child_at_index(index);
+            if (!this._isActorUsable(item)) continue;
+
+            const icon = item.icon?.icon;
+            if (!this._isActorUsable(icon)) continue;
+
+            const overlay = item._chRunningOverlay;
+            const animationActor =
+                overlay && this._isActorUsable(overlay) ? overlay : icon;
+
+            if (!animationActor._chGridExitPending) continue;
+
+            animationActor._chGridEntranceGeneration =
+                (animationActor._chGridEntranceGeneration ?? 0) + 1;
+            animationActor._chGridEntranceOpacityPending = false;
+            animationActor._chGridExitPending = false;
+            IconAnimator.reset(animationActor);
+        }
     }
 
     _animatePending() {
@@ -183,6 +296,7 @@ export class IconGridEntranceController {
             const animationActor =
                 overlay && this._isActorUsable(overlay) ? overlay : icon;
 
+            animationActor._chGridExitPending = false;
             const generation =
                 (animationActor._chGridEntranceGeneration ?? 0) + 1;
             animationActor._chGridEntranceGeneration = generation;

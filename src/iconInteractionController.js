@@ -494,6 +494,8 @@ export class IconInteractionController {
         const animationActor =
             overlay && this._isActorUsable(overlay) ? overlay : icon;
 
+        if (animationActor._chGridExitPending) return;
+
         if (animationActor._chGridEntranceOpacityPending) {
             animationActor._chGridEntranceGeneration =
                 (animationActor._chGridEntranceGeneration ?? 0) + 1;
