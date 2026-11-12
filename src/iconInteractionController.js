@@ -1,6 +1,4 @@
 import Pango from "gi://Pango";
-import GLib from "gi://GLib";
-import Meta from "gi://Meta";
 import Clutter from "gi://Clutter";
 import Gio from "gi://Gio";
 import GObject from "gi://GObject";
@@ -8,10 +6,20 @@ import { InjectionManager } from "resource:///org/gnome/shell/extensions/extensi
 import { FolderView } from "resource:///org/gnome/shell/ui/appDisplay.js";
 import * as PopupMenu from "resource:///org/gnome/shell/ui/popupMenu.js";
 import * as Main from "resource:///org/gnome/shell/ui/main.js";
-import { ControlsState } from "resource:///org/gnome/shell/ui/overviewControls.js";
 import { IconAnimator } from "./iconAnimations.js";
 import { RunningIndicators } from "./runningIndicators.js";
 import { FolderDragDiagnostics } from "./folderDragDiagnostics.js";
+import {
+    APP_ICON_SIZES,
+    APP_ICON_TILE_SIZE,
+    HOVER_Z_POSITION,
+    ICON_TEXTURE_OVERSAMPLE,
+    LABEL_OFFSET_Y,
+    TILE_REFERENCE_SCALE,
+    IconAppearanceController,
+} from "./iconAppearanceController.js";
+import { IconGridEntranceController } from "./iconGridEntranceController.js";
+import { IconGridGeometryDiagnostics } from "./iconGridGeometryDiagnostics.js";
 
 function openDesktopFileForIcon(item) {
     const appInfo = item?.app?.get_app_info?.();
@@ -26,141 +34,26 @@ function openDesktopFileForIcon(item) {
     }
 }
 
-
-function scheduleAppGridGeometryDump(controller, phase) {
-    if (!controller._chGeometryDumpPhases)
-        controller._chGeometryDumpPhases = new Set();
-
-    if (controller._chGeometryDumpPhases.has(phase))
-        return;
-
-    controller._chGeometryDumpPhases.add(phase);
-
-    const read = (fn, fallback = null) => {
-        try {
-            return fn();
-        } catch (_error) {
-            return fallback;
-        }
-    };
-
-    const round = value =>
-        Number.isFinite(value)
-            ? Math.round(value * 100) / 100
-            : null;
-
-    const pair = fn => {
-        const value = read(fn);
-        return value ? [round(value[0]), round(value[1])] : null;
-    };
-
-    const snapshot = (actor, tileY = null) => {
-        if (!actor) return null;
-
-        const stage = pair(() => actor.get_transformed_position());
-        const box = read(() => {
-            const b = actor.get_allocation_box();
-            return [
-                round(b.x1), round(b.y1),
-                round(b.x2), round(b.y2),
-            ];
-        });
-
-        return {
-            type: read(() => actor.constructor.name),
-            parent: read(() => actor.get_parent()?.constructor.name),
-            position: pair(() => actor.get_position()),
-            stagePosition: stage,
-            relativeY: stage && tileY !== null
-                ? round(stage[1] - tileY)
-                : null,
-            size: pair(() => actor.get_size()),
-            stageSize: pair(() => actor.get_transformed_size()),
-            allocation: box,
-            preferred: read(() =>
-                actor.get_preferred_size().map(round)
-            ),
-            yAlign: read(() => actor.y_align),
-            xAlign: read(() => actor.x_align),
-            yExpand: read(() => actor.y_expand),
-            translationY: round(read(() => actor.translation_y)),
-            scaleY: round(read(() => actor.scale_y)),
-            visible: read(() => actor.visible),
-            clip: read(() => actor.clip_to_allocation),
-        };
-    };
-
-    GLib.timeout_add(GLib.PRIORITY_DEFAULT, 800, () => {
-        const grid = controller._appDisplay?._grid;
-
-        if (!grid) {
-            console.log(
-                `[ALT_ICON_GEOMETRY] ${phase}: AppGrid unavailable`
-            );
-            return GLib.SOURCE_REMOVE;
-        }
-
-        const count = grid.get_n_children();
-
-        console.log(
-            `[ALT_ICON_GEOMETRY_BEGIN] phase=${phase} count=${count}`
-        );
-
-        for (let i = 0; i < count; i++) {
-            const item = grid.get_child_at_index(i);
-            if (!item) continue;
-
-            const tile = snapshot(item);
-            const tileY = tile?.stagePosition?.[1] ?? 0;
-            const base = item.icon;
-            const bin = base?._iconBin;
-
-            const record = {
-                phase,
-                index: i,
-                app: read(() => item.app.get_name(), "Unknown"),
-                item: tile,
-                iconContainer: snapshot(item._iconContainer, tileY),
-                baseIcon: snapshot(base, tileY),
-                iconBox: snapshot(base?._box, tileY),
-                iconBin: snapshot(bin, tileY),
-                binChild: snapshot(read(() => bin.get_child()), tileY),
-                overlay: snapshot(item._chRunningOverlay, tileY),
-                icon: snapshot(base?.icon, tileY),
-                label: snapshot(base?.label, tileY),
-            };
-
-            console.log(
-                `[ALT_ICON_GEOMETRY] ${JSON.stringify(record)}`
-            );
-        }
-
-        console.log(`[ALT_ICON_GEOMETRY_END] phase=${phase}`);
-        return GLib.SOURCE_REMOVE;
-    });
-}
-
 export class IconInteractionController {
-    static ICON_TEXTURE_OVERSAMPLE = 1.5;
-
-    static ICON_SIZE = {
-        smallest: 60,
-        small: 70,
-        normal: 80,
-        large: 90,
-        largest: 100,
-    };
-
-    static LABEL_OFFSET_Y = 40;
-    static APP_ICON_TILE_SIZE = 150;
-    static HOVER_Z_POSITION = 0.00000001;
-
-    static TILE_REFERENCE_SCALE = 1.5;
+    static ICON_TEXTURE_OVERSAMPLE = ICON_TEXTURE_OVERSAMPLE;
+    static ICON_SIZE = APP_ICON_SIZES;
+    static LABEL_OFFSET_Y = LABEL_OFFSET_Y;
+    static APP_ICON_TILE_SIZE = APP_ICON_TILE_SIZE;
+    static HOVER_Z_POSITION = HOVER_Z_POSITION;
+    static TILE_REFERENCE_SCALE = TILE_REFERENCE_SCALE;
 
     constructor(settings, appDisplay) {
         this._settings = settings;
         this._appDisplay = appDisplay;
         this._runningIndicators = new RunningIndicators(settings);
+        this._geometryDiagnostics = new IconGridGeometryDiagnostics();
+        this._appearanceController = new IconAppearanceController(
+            settings,
+            appDisplay,
+            this._runningIndicators,
+            (actor) => this._isActorUsable(actor),
+            this._geometryDiagnostics,
+        );
 
         this._folderDragDiagnosticsController = new FolderDragDiagnostics(
             appDisplay,
@@ -187,30 +80,17 @@ export class IconInteractionController {
         );
 
         this._controls = Main.overview?._overview?._controls ?? null;
-        this._stateAdjustment = this._controls?._stateAdjustment ?? null;
-        this._gridEntrancePending = false;
-        this._gridEntranceShown = false;
-        this._gridEntranceLaterId = 0;
-        this._overviewStateChangedId = this._stateAdjustment?.connect(
-            "notify::value",
-            () => this._onOverviewStateChanged(),
-        ) ?? 0;
-        this._gridEntranceDirectionChangedId = settings.connect(
-            "changed::app-grid-animation-direction",
-            () => this._onOverviewStateChanged(),
-        );
-        this._appDisplayVisibleId = appDisplay.connect(
-            "notify::visible",
-            () => this._onAppDisplayVisibilityChanged(),
+        this._gridEntranceController = new IconGridEntranceController(
+            settings,
+            appDisplay,
+            this._controls,
+            (actor) => this._isActorUsable(actor),
+            (key, curveName) => this._getCurveDuration(key, curveName),
         );
         this._viewLoadedId = appDisplay.connect("view-loaded", () => {
             this.updateNamesVisibility();
-            this._schedulePendingGridEntrance();
+            this._gridEntranceController.schedulePending();
         });
-
-        this._onOverviewStateChanged();
-        if (appDisplay.visible)
-            this._onAppDisplayVisibilityChanged();
 
         this._openDesktopFileMenuChangedId = settings.connect(
             "changed::app-grid-show-open-desktop-file",
@@ -258,181 +138,29 @@ export class IconInteractionController {
         }
     }
 
-    _resolveNominalSize(icon, baseSize) {
-        const raw =
-            Number.isFinite(baseSize) && baseSize > 0
-                ? baseSize
-                : icon._chOriginalIconSize;
-
-        return Math.max(
-            1,
-            Math.round(raw * IconInteractionController.TILE_REFERENCE_SCALE),
-        );
-    }
-
     updateNamesVisibility() {
-        const appDisplay = this._appDisplay;
-        const grid = appDisplay?._grid;
-
-        if (!appDisplay || !grid) return;
-
-        const mode = this._settings.get_string("app-grid-names-visibility");
-
-        const processItem = (item, isFolderViewItem = false) => {
-            if (!item || item.is_destroyed?.()) return;
-
-            this.applyNameVisibilityMode(item, mode, isFolderViewItem);
-        };
-
-        /*
-         * Основний AppGrid.
-         */
-        for (let index = 0; index < grid.get_n_children(); index++) {
-            processItem(grid.get_child_at_index(index));
-        }
-
-        /*
-         * AppIcons усередині папок.
-         *
-         * FolderView має власний AppGrid, тому звичайний цикл вище
-         * до них не доходить.
-         */
-        for (const folderIcon of appDisplay._folderIcons ?? []) {
-            const folderView = folderIcon?.view;
-
-            if (!this._isActorUsable(folderView)) continue;
-
-            try {
-                for (const item of folderView.getAllItems?.() ?? [])
-                    processItem(item, true);
-            } catch (_error) {
-                // FolderView може перебувати на етапі знищення.
-            }
-        }
+        this._appearanceController.updateNamesVisibility(
+            (item, isFolderViewItem) =>
+                this._ensureHoverHandler(item, isFolderViewItem),
+        );
     }
 
     applyNameVisibilityMode(item, mode, isFolderViewItem = false) {
-        if (!item || !this._isActorUsable(item)) return;
-
-        const baseIcon = item.icon;
-
-        if (!baseIcon || !this._isActorUsable(baseIcon)) return;
-
-        const icon = baseIcon.icon;
-        const label = baseIcon.label;
-
-        if (icon && !this._isActorUsable(icon)) return;
-        if (label && !this._isActorUsable(label)) return;
-
-        if (!label) return;
-
-        this._ensureHoverHandler(item, isFolderViewItem);
-
-        const shouldShow =
-            mode === "always" ||
-            (mode === "hover" && item._chIconHovered === true);
-
-        /*
-         * Do not interrupt an active fade when GNOME redisplays the grid.
-         * Reset opacity only when the visibility mode changes or no
-         * transition is currently running.
-         */
-        const modeChanged = item._chNameVisibilityMode !== mode;
-
-        if (modeChanged) {
-            item._chLabelOpacityGeneration =
-                (item._chLabelOpacityGeneration ?? 0) + 1;
-
-            label.remove_transition("opacity");
-            item._chNameVisibilityMode = mode;
-        } else if (label.get_transition("opacity")) {
-            return;
-        }
-
-        label.opacity = shouldShow ? 255 : 0;
-        label.visible = shouldShow;
+        this._appearanceController.applyNameVisibilityMode(
+            item,
+            mode,
+            isFolderViewItem,
+            (targetItem, isFolderItem) =>
+                this._ensureHoverHandler(targetItem, isFolderItem),
+        );
     }
 
     lockTileSize(item, _baseSize = null) {
-        if (!item || item.is_destroyed?.() || !this._isActorUsable(item))
-            return null;
-
-        this._installFixedPreferredSize(item);
-
-        return IconInteractionController.APP_ICON_TILE_SIZE;
+        return this._appearanceController.lockTileSize(item);
     }
 
     applyIconSize(item, _baseSize = null) {
-        if (!item || item.is_destroyed?.() || !this._isActorUsable(item))
-            return;
-
-        const baseIcon = item.icon;
-
-        if (!baseIcon || !this._isActorUsable(baseIcon)) return;
-
-        const icon = baseIcon.icon;
-
-        if (!icon || icon.is_destroyed?.() || !this._isActorUsable(icon))
-            return;
-
-        const key = this._settings.get_string("app-grid-icon-size");
-
-        const size =
-            IconInteractionController.ICON_SIZE[key] ??
-            IconInteractionController.ICON_SIZE.normal;
-
-        this._installFixedIconPreferredSize(icon, size);
-
-        icon._chIconSizeScale = 1.0;
-
-        icon.icon_size = Math.round(
-            size * IconInteractionController.ICON_TEXTURE_OVERSAMPLE,
-        );
-
-        icon.set_size(size, size);
-        icon.set_pivot_point(0.5, 0.5);
-
-        this._runningIndicators.ensureOverlay(item, size);
-
-        const iconBinRef = baseIcon._iconBin;
-        const iconBin =
-            iconBinRef && this._isActorUsable(iconBinRef) ? iconBinRef : null;
-
-        const iconContainerRef = item._iconContainer;
-        const iconContainer =
-            iconContainerRef && this._isActorUsable(iconContainerRef)
-                ? iconContainerRef
-                : null;
-
-        icon.clip_to_allocation = false;
-
-        if (iconBin) {
-            // Зберігаємо початкове вирівнювання лише один раз.
-            if (iconBin._chOriginalIconBinYAlign === undefined)
-                iconBin._chOriginalIconBinYAlign = iconBin.y_align;
-
-            iconBin.clip_to_allocation = false;
-            iconBin.y_align = Clutter.ActorAlign.CENTER;
-
-            // BaseIcon._box is a vertical BoxLayout.
-            // Expand _iconBin vertically so its own BinLayout
-            // can center the overlay inside the available height.
-            if (iconBin._chOriginalIconBinYExpand === undefined)
-                iconBin._chOriginalIconBinYExpand = iconBin.y_expand;
-
-            iconBin.y_expand = true;
-        }
-
-        baseIcon.clip_to_allocation = false;
-
-        if (iconContainer) iconContainer.clip_to_allocation = false;
-
-        item.clip_to_allocation = false;
-
-        if (!item.has_style_class_name?.("app-folder"))
-            this._ensureLabelOverlay(item);
-
-        scheduleAppGridGeometryDump(this, "enabled");
+        this._appearanceController.applyIconSize(item);
     }
 
     disable() {
@@ -497,21 +225,8 @@ export class IconInteractionController {
             this._viewLoadedId = 0;
         }
 
-        if (this._appDisplayVisibleId) {
-            this._appDisplay.disconnect(this._appDisplayVisibleId);
-            this._appDisplayVisibleId = 0;
-        }
-        if (this._overviewStateChangedId && this._stateAdjustment) {
-            this._stateAdjustment.disconnect(this._overviewStateChangedId);
-            this._overviewStateChangedId = 0;
-        }
-        if (this._gridEntranceDirectionChangedId) {
-            this._settings.disconnect(this._gridEntranceDirectionChangedId);
-            this._gridEntranceDirectionChangedId = 0;
-        }
-        this._gridEntrancePending = false;
-        this._gridEntranceShown = false;
-        this._cancelPendingGridEntrance();
+        this._gridEntranceController?.destroy();
+        this._gridEntranceController = null;
 
         for (const item of items) {
             if (!item || !this._isActorUsable(item)) continue;
@@ -656,16 +371,12 @@ export class IconInteractionController {
             }
 
             // Відновлюємо початкове вертикальне вирівнювання GNOME.
-            if (
-                iconBin &&
-                iconBin._chOriginalIconBinYAlign !== undefined
-            ) {
+            if (iconBin && iconBin._chOriginalIconBinYAlign !== undefined) {
                 iconBin.y_align = iconBin._chOriginalIconBinYAlign;
                 delete iconBin._chOriginalIconBinYAlign;
 
                 if (iconBin._chOriginalIconBinYExpand !== undefined) {
-                    iconBin.y_expand =
-                        iconBin._chOriginalIconBinYExpand;
+                    iconBin.y_expand = iconBin._chOriginalIconBinYExpand;
                     delete iconBin._chOriginalIconBinYExpand;
                 }
                 iconBin.queue_relayout();
@@ -801,7 +512,7 @@ export class IconInteractionController {
             item.z_position = 0;
         }
 
-        scheduleAppGridGeometryDump(this, "disabled");
+        this._geometryDiagnostics.schedule(this._appDisplay, "disabled");
     }
 
     _animate(item, kind, activeOverride = null) {
@@ -856,374 +567,25 @@ export class IconInteractionController {
         });
     }
 
-    _cancelPendingGridEntrance() {
-        if (!this._gridEntranceLaterId) return;
-
-        try {
-            global.compositor?.get_laters?.()?.remove(
-                this._gridEntranceLaterId,
-            );
-        } catch (_error) {
-            // The compositor may already be tearing down.
-        }
-
-        this._gridEntranceLaterId = 0;
-    }
-
-    _schedulePendingGridEntrance() {
-        if (
-            !this._gridEntrancePending ||
-            this._gridEntranceLaterId ||
-            !this._appDisplay?.visible ||
-            this._controls?._searchController?.searchActive
-        )
-            return;
-
-        const laters = global.compositor?.get_laters?.();
-        if (!laters) {
-            this._animatePendingGridEntrance();
-            return;
-        }
-
-        this._gridEntranceLaterId = laters.add(
-            Meta.LaterType.BEFORE_REDRAW,
-            () => {
-                this._gridEntranceLaterId = 0;
-                this._animatePendingGridEntrance();
-                return GLib.SOURCE_REMOVE;
-            },
-        );
-    }
-
-    _onOverviewStateChanged() {
-        const state = this._stateAdjustment?.getStateTransitionParams?.();
-        const shouldAnimate =
-            state?.finalState === ControlsState.APP_GRID &&
-            this._settings.get_string("app-grid-animation-direction") ===
-                "grow-in-place";
-
-        if (!shouldAnimate) {
-            this._gridEntrancePending = false;
-            this._gridEntranceShown = false;
-            this._cancelPendingGridEntrance();
-            return;
-        }
-
-        if (this._gridEntranceShown) return;
-
-        this._gridEntrancePending = true;
-        if (
-            this._appDisplay?.visible &&
-            !this._controls?._searchController?.searchActive
-        )
-            this._schedulePendingGridEntrance();
-    }
-
-    _onAppDisplayVisibilityChanged() {
-        if (!this._appDisplay?.visible) {
-            this._cancelPendingGridEntrance();
-            return;
-        }
-
-        this._onOverviewStateChanged();
-    }
-
-    _animatePendingGridEntrance() {
-        if (!this._gridEntrancePending) return;
-
-        const appDisplay = this._appDisplay;
-        const state = this._stateAdjustment?.getStateTransitionParams?.();
-        if (
-            state?.finalState !== ControlsState.APP_GRID ||
-            this._settings.get_string("app-grid-animation-direction") !==
-                "grow-in-place"
-        ) {
-            this._gridEntrancePending = false;
-            this._gridEntranceShown = false;
-            this._cancelPendingGridEntrance();
-            return;
-        }
-
-        if (
-            !appDisplay?.visible ||
-            this._controls?._searchController?.searchActive
-        )
-            return;
-
-        const grid = appDisplay._grid;
-        if (!grid) return;
-
-        const currentPage = Number.isInteger(grid.currentPage)
-            ? grid.currentPage
-            : 0;
-        const pageItems = grid.getItemsAtPage?.(currentPage);
-        const items =
-            Array.isArray(pageItems) && pageItems.length > 0
-                ? pageItems
-                : Array.from(
-                      { length: grid.get_n_children() },
-                      (_, index) => grid.get_child_at_index(index),
-                  );
-
-        if (items.length === 0) return;
-
-        const curveName = this._settings.get_string(
-            "app-grid-icon-hover-curve",
-        );
-        const duration = this._getCurveDuration(
-            "app-grid-icon-hover-in-durations",
-            curveName,
-        );
-
-        let animated = false;
-
-        for (const item of items) {
-            if (!this._isActorUsable(item) || item.visible === false)
-                continue;
-
-            const baseIcon = item.icon;
-            const icon = baseIcon?.icon;
-            if (!this._isActorUsable(icon)) continue;
-
-            const overlay = item._chRunningOverlay;
-            const animationActor =
-                overlay && this._isActorUsable(overlay) ? overlay : icon;
-
-            const generation =
-                (animationActor._chGridEntranceGeneration ?? 0) + 1;
-            animationActor._chGridEntranceGeneration = generation;
-            animationActor._chGridEntranceOpacityPending = true;
-            animationActor.opacity = 0;
-
-            IconAnimator.scale(animationActor, {
-                active: true,
-                targetScale: 1.0,
-                curveName,
-                inDuration: duration,
-                outDuration: duration,
-                startScale: 0.5,
-            });
-
-            animationActor.ease({
-                opacity: 255,
-                mode: Clutter.AnimationMode.EASE_OUT_QUAD,
-                duration,
-                onComplete: () => {
-                    if (
-                        !this._isActorUsable(animationActor) ||
-                        animationActor._chGridEntranceGeneration !==
-                            generation
-                    )
-                        return;
-
-                    animationActor._chGridEntranceOpacityPending = false;
-                    animationActor.opacity = 255;
-                },
-            });
-
-            animated = true;
-        }
-
-        if (animated) {
-            this._gridEntrancePending = false;
-            this._gridEntranceShown = true;
-        }
-    }
-
     _getCurveDuration(key, curveName) {
         const values = this._settings.get_value(key).deep_unpack();
         return curveName in values ? values[curveName] : 200;
     }
 
     _animateLabelVisibility(item, visible) {
-        if (!this._isActorUsable(item)) return;
-
-        const label = item.icon?.label;
-
-        if (!this._isActorUsable(label)) return;
-
-        const curveName = this._settings.get_string(
-            "app-grid-icon-hover-curve",
+        this._appearanceController.animateLabelVisibility(
+            item,
+            visible,
+            (key, curveName) => this._getCurveDuration(key, curveName),
         );
-
-        /*
-         * Opacity must change monotonically.
-         * Bounce/Elastic/Back curves make text fade in and out repeatedly.
-         * Keep the icon's selected curve, but use a smooth fade for its label.
-         */
-        const animationMode = Clutter.AnimationMode.EASE_OUT_QUAD;
-
-        const durationKey = visible
-            ? "app-grid-icon-hover-in-durations"
-            : "app-grid-icon-hover-out-durations";
-
-        const duration = this._getCurveDuration(
-            durationKey,
-            curveName,
-        );
-
-        /*
-         * A generation token prevents an obsolete fade-out callback
-         * from hiding a label that has already started fading in again.
-         */
-        const generation = (item._chLabelOpacityGeneration ?? 0) + 1;
-        item._chLabelOpacityGeneration = generation;
-
-        label.remove_transition("opacity");
-
-        if (visible) {
-            /*
-             * Start from zero only when the label was actually hidden.
-             * If it is already fading out, continue from current opacity.
-             */
-            if (!label.visible)
-                label.opacity = 0;
-
-            label.visible = true;
-        }
-
-        label.ease({
-            opacity: visible ? 255 : 0,
-            mode: animationMode,
-            duration,
-
-            onComplete: () => {
-                if (
-                    !this._isActorUsable(item) ||
-                    !this._isActorUsable(label) ||
-                    item._chLabelOpacityGeneration !== generation
-                )
-                    return;
-
-                if (
-                    !visible &&
-                    item._chIconHovered !== true &&
-                    this._settings.get_string(
-                        "app-grid-names-visibility",
-                    ) === "hover"
-                )
-                    label.visible = false;
-            },
-        });
     }
 
     _ensureLabelOverlay(item) {
-        const baseIcon = item?.icon;
-        const label = baseIcon?.label;
-        const container = item?._iconContainer;
-        const icon = baseIcon?.icon;
-
-        if (!label || !container || !icon) return;
-
-        if (label.get_parent() !== container) {
-            const parent = label.get_parent();
-
-            if (parent) parent.remove_child(label);
-
-            container.add_child(label);
-        }
-
-        label.x_expand = false;
-        label.y_expand = false;
-
-        label.x_align = Clutter.ActorAlign.CENTER;
-        label.y_align = Clutter.ActorAlign.START;
-
-        const labelWidth = IconInteractionController.APP_ICON_TILE_SIZE;
-
-        label.set_width(labelWidth);
-
-        label.clip_to_allocation = false;
-
-        if (!label._chSingleLineHeight) {
-            const [, naturalHeight] = label.get_preferred_height(labelWidth);
-
-            if (Number.isFinite(naturalHeight) && naturalHeight > 0)
-                label._chSingleLineHeight = naturalHeight;
-        }
-
-        if (
-            Number.isFinite(label._chSingleLineHeight) &&
-            label._chSingleLineHeight > 0
-        ) {
-            label.set_height(label._chSingleLineHeight * 4);
-        }
-
-        label.clutter_text.set({
-            x_align: Clutter.ActorAlign.CENTER,
-            y_align: Clutter.ActorAlign.START,
-        });
-
-        const key = this._settings.get_string("app-grid-icon-size");
-
-        const size =
-            IconInteractionController.ICON_SIZE[key] ??
-            IconInteractionController.ICON_SIZE.normal;
-
-        label.translation_y =
-            IconInteractionController.LABEL_OFFSET_Y + size / 2;
-    }
-
-    _installFixedIconPreferredSize(icon, size) {
-        if (!icon || icon.is_destroyed?.() || !this._isActorUsable(icon))
-            return;
-
-        if (icon._chFixedPreferredSizeInstalled) {
-            icon._chFixedPreferredSize = size;
-            return;
-        }
-
-        const original = icon.get_preferred_size;
-
-        if (typeof original !== "function") return;
-
-        icon._chOriginalGetPreferredSize = original;
-
-        icon.get_preferred_size = function () {
-            const fixedSize = this._chFixedPreferredSize;
-
-            if (Number.isFinite(fixedSize) && fixedSize > 0)
-                return [fixedSize, fixedSize, fixedSize, fixedSize];
-
-            return this._chOriginalGetPreferredSize.call(this);
-        };
-
-        icon._chFixedPreferredSizeInstalled = true;
-        icon._chFixedPreferredSize = size;
+        this._appearanceController.ensureLabelOverlay(item);
     }
 
     _installFixedPreferredSize(item) {
-        if (!item || item.is_destroyed?.() || !this._isActorUsable(item))
-            return;
-
-        if (item._chFixedPreferredSizeInstalled) return;
-
-        const original = item.get_preferred_size;
-
-        if (typeof original !== "function") return;
-
-        item._chOriginalGetPreferredSize = original;
-
-        item.get_preferred_size = function () {
-            const size = this._chFixedPreferredSize;
-
-            if (Number.isFinite(size) && size > 0) {
-                return [size, size, size, size];
-            }
-
-            return this._chOriginalGetPreferredSize.call(this);
-        };
-
-        item._chFixedPreferredSizeInstalled = true;
-
-        this._refreshFixedPreferredSize(item);
-    }
-
-    _refreshFixedPreferredSize(item) {
-        if (!item) return;
-
-        item._chFixedPreferredSize =
-            IconInteractionController.APP_ICON_TILE_SIZE;
+        this._appearanceController.installFixedPreferredSize(item);
     }
 
     _closeAppWindows(item) {
@@ -1240,10 +602,7 @@ export class IconInteractionController {
         for (const window of windows) {
             if (!window) continue;
 
-            if (
-                typeof window.can_close === "function" &&
-                !window.can_close()
-            )
+            if (typeof window.can_close === "function" && !window.can_close())
                 continue;
 
             window.delete(timestamp);
@@ -1317,8 +676,7 @@ export class IconInteractionController {
 
         if (!menuOpen) {
             const [stageX, stageY] = global.get_pointer();
-            const [valid, x, y] =
-                icon.transform_stage_point(stageX, stageY);
+            const [valid, x, y] = icon.transform_stage_point(stageX, stageY);
 
             hovered =
                 valid &&
@@ -1512,9 +870,6 @@ export class IconInteractionController {
         item.reactive = isFolder;
         item.track_hover = false;
 
-        item.reactive = isFolder;
-        item.track_hover = false;
-
         icon.reactive = true;
 
         if (!isFolder && typeof item.activate === "function") {
@@ -1685,7 +1040,7 @@ export class IconInteractionController {
             if (item._iconContainer && this._isActorUsable(item._iconContainer))
                 item._iconContainer.clip_to_allocation = false;
 
-            item.z_position = 0.00000001;
+            item.z_position = IconInteractionController.HOVER_Z_POSITION;
             item._updateMultiline();
 
             this._animate(item, "hover", true);
@@ -1705,8 +1060,7 @@ export class IconInteractionController {
             const label = baseIcon.label;
 
             // Context menu must preserve the hovered icon appearance.
-            if (item._chContextMenuOpen)
-                return Clutter.EVENT_PROPAGATE;
+            if (item._chContextMenuOpen) return Clutter.EVENT_PROPAGATE;
 
             item._chIconHovered = false;
 
@@ -1728,10 +1082,7 @@ export class IconInteractionController {
              * pressed належить усій плитці 150x150.
              * Анімацію запускаємо лише над графічною іконкою.
              */
-            if (
-                this._isActorUsable(item) &&
-                item._chIconHovered
-            )
+            if (this._isActorUsable(item) && item._chIconHovered)
                 this._animate(item, "press");
         });
     }
