@@ -133,7 +133,6 @@ export class BackgroundController {
         const backgrounds = this._backgrounds;
         this._backgrounds = [];
 
-        // Release resources before destroying the actors.
         for (const background of backgrounds) {
             try {
                 background.cleanup();

@@ -62,10 +62,6 @@ export class AppGridOrderController {
         const controller = this;
 
         appDisplay._getItemPosition = function (item) {
-            /*
-             * Preserve GNOME's native handling of the temporary
-             * placeholder used during drag operations.
-             */
             if (item === this._placeholder)
                 return controller._originalGetItemPosition.call(this, item);
 
@@ -90,10 +86,6 @@ export class AppGridOrderController {
             if (!Number.isFinite(itemsPerPage) || itemsPerPage <= 0)
                 return controller._originalRedisplay.apply(this, args);
 
-            /*
-             * Preserve the current _loadApps implementation.
-             * It may already be patched by AppGridController.
-             */
             const originalLoadApps = this._loadApps;
 
             try {
@@ -106,10 +98,6 @@ export class AppGridOrderController {
                     controller._targetPositions.set(item, [page, position]);
                 });
 
-                /*
-                 * Reuse exactly the same AppIcon objects that were used
-                 * to calculate target positions.
-                 */
                 this._loadApps = function () {
                     return items;
                 };
@@ -121,30 +109,14 @@ export class AppGridOrderController {
             }
         };
 
-        /*
-         * Keep manual PageManager positions untouched while automatic
-         * sorting is active.
-         */
         appDisplay._savePages = function (...args) {
-            if (controller._getOrderMode() !== "manual")
-                return;
+            if (controller._getOrderMode() !== "manual") return;
 
             return controller._originalSavePages.apply(this, args);
         };
 
-        /*
-         * Disable manual icon repositioning in automatic modes.
-         * Folder-related drops are handled separately by AppIcon.
-         */
         appDisplay._maybeMoveItem = function (...args) {
-            /*
-             * Ordinary icons must not change the saved manual layout.
-             * GNOME's temporary placeholder must remain movable.
-             */
-            if (
-                controller._getOrderMode() !== "manual" &&
-                !this._placeholder
-            ) {
+            if (controller._getOrderMode() !== "manual" && !this._placeholder) {
                 this._removeDelayedMove?.();
                 return;
             }
@@ -152,38 +124,19 @@ export class AppGridOrderController {
             return controller._originalMaybeMoveItem.apply(this, args);
         };
 
-        /*
-         * In automatic modes, discard pending grid-position changes.
-         * The native method still handles removing apps from folders
-         * and favorites after the grid-specific move has been cancelled.
-         */
         appDisplay.acceptDrop = function (source, ...args) {
             if (controller._getOrderMode() !== "manual") {
                 delete this._dropTarget;
                 this._removeDelayedMove?.();
             }
 
-            return controller._originalAcceptDrop.call(
-                this,
-                source,
-                ...args,
-            );
+            return controller._originalAcceptDrop.call(this, source, ...args);
         };
 
-        /*
-         * Creating a folder initially places it at the drop location.
-         * Reapply automatic sorting after the native operation finishes.
-         */
         appDisplay.createFolder = function (...args) {
-            const result = controller._originalCreateFolder.apply(
-                this,
-                args,
-            );
+            const result = controller._originalCreateFolder.apply(this, args);
 
-            if (
-                result &&
-                controller._getOrderMode() !== "manual"
-            )
+            if (result && controller._getOrderMode() !== "manual")
                 controller._refreshAppGrid();
 
             return result;
@@ -292,23 +245,20 @@ export class AppGridOrderController {
     _createComparator() {
         const mode = this._getOrderMode();
 
-        /*
-         * Read statistics once per redisplay, not once per comparison.
-         * Folder metrics are aggregated from their contained applications.
-         */
-        const counts = mode === "usage"
-            ? this._getDictionary("app-grid-launch-counts")
-            : {};
+        const counts =
+            mode === "usage"
+                ? this._getDictionary("app-grid-launch-counts")
+                : {};
 
-        const lastUsed = mode === "last-used"
-            ? this._getDictionary("app-grid-last-used")
-            : {};
+        const lastUsed =
+            mode === "last-used"
+                ? this._getDictionary("app-grid-last-used")
+                : {};
 
         const metrics = new Map();
 
-        const getMetrics = item => {
-            if (metrics.has(item))
-                return metrics.get(item);
+        const getMetrics = (item) => {
+            if (metrics.has(item)) return metrics.get(item);
 
             const appIds = this._getItemIds(item);
 
@@ -336,8 +286,7 @@ export class AppGridOrderController {
 
             if (mode === "last-used")
                 return (
-                    getMetrics(right).lastUsed -
-                    getMetrics(left).lastUsed ||
+                    getMetrics(right).lastUsed - getMetrics(left).lastUsed ||
                     this._compareNames(left, right)
                 );
 
@@ -365,8 +314,7 @@ export class AppGridOrderController {
             return appId ? [appId] : [];
         }
 
-        if (typeof item.getAppIds === "function")
-            return item.getAppIds();
+        if (typeof item.getAppIds === "function") return item.getAppIds();
 
         return [];
     }

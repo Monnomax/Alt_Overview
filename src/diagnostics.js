@@ -56,9 +56,7 @@ export class Diagnostics {
                     message: String(error?.message ?? error).slice(0, 500),
                 }),
             );
-        } catch (_settingsError) {
-            // The journal remains the source of the full diagnostic record.
-        }
+        } catch (_settingsError) {}
     }
 
     setRuntimeState(state) {
@@ -80,7 +78,8 @@ export class Diagnostics {
         if (!this._settings) return level === "errors";
 
         try {
-            const configuredLevel = this._settings.get_string("diagnostics-level");
+            const configuredLevel =
+                this._settings.get_string("diagnostics-level");
             return (LEVELS[configuredLevel] ?? LEVELS.errors) >= LEVELS[level];
         } catch (_error) {
             return level === "errors";

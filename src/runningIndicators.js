@@ -66,10 +66,8 @@ function drawRunningIndicator(area) {
         cr.setOperator(Cairo.Operator.OVER);
         cr.setAntialias(Cairo.Antialias.BEST);
 
-        const color =
-            area._chDotColor ??
-            area._chThemeColor ??
-            [0.75, 0.75, 0.75];
+        const color = area._chDotColor ??
+            area._chThemeColor ?? [0.75, 0.75, 0.75];
         const cornerCount = Math.max(
             3,
             Math.min(12, Math.round(Number(area._chDotCorners) || 4)),
@@ -86,8 +84,12 @@ function drawRunningIndicator(area) {
             (_, index) => startAngle + (2 * Math.PI * index) / cornerCount,
         );
 
-        const maxX = Math.max(...angles.map((angle) => Math.abs(Math.cos(angle))));
-        const maxY = Math.max(...angles.map((angle) => Math.abs(Math.sin(angle))));
+        const maxX = Math.max(
+            ...angles.map((angle) => Math.abs(Math.cos(angle))),
+        );
+        const maxY = Math.max(
+            ...angles.map((angle) => Math.abs(Math.sin(angle))),
+        );
         const inset = 0.75;
         const polygonRadius = Math.min(
             (width / 2 - inset) / maxX,
@@ -123,13 +125,11 @@ function drawRunningIndicator(area) {
             cr.closePath();
         } else {
             const tangentDistance = cornerRadius / tangentFactor;
-            const bisectorDistance =
-                cornerRadius / Math.sin(interiorAngle / 2);
+            const bisectorDistance = cornerRadius / Math.sin(interiorAngle / 2);
 
             const roundedCorners = vertices.map((vertex, index) => {
-                const previous = vertices[
-                    (index - 1 + cornerCount) % cornerCount
-                ];
+                const previous =
+                    vertices[(index - 1 + cornerCount) % cornerCount];
                 const next = vertices[(index + 1) % cornerCount];
 
                 const toPrevious = {
@@ -149,8 +149,12 @@ function drawRunningIndicator(area) {
                     y: vertex.y + toPrevious.y * tangentDistance,
                 };
                 const center = {
-                    x: vertex.x + (bisectorX / bisectorLength) * bisectorDistance,
-                    y: vertex.y + (bisectorY / bisectorLength) * bisectorDistance,
+                    x:
+                        vertex.x +
+                        (bisectorX / bisectorLength) * bisectorDistance,
+                    y:
+                        vertex.y +
+                        (bisectorY / bisectorLength) * bisectorDistance,
                 };
 
                 return {
@@ -181,7 +185,6 @@ function drawRunningIndicator(area) {
 
         cr.fill();
     } finally {
-        // St.DrawingArea returns a Cairo context that GJS must explicitly dispose.
         cr.$dispose();
     }
 }
@@ -263,9 +266,11 @@ export class RunningIndicators {
             if (!color) return;
 
             dot._chThemeColor = color;
-            if (!this._settings.get_boolean(
-                "app-grid-running-indicator-dynamic-color",
-            ))
+            if (
+                !this._settings.get_boolean(
+                    "app-grid-running-indicator-dynamic-color",
+                )
+            )
                 dot.queue_repaint();
         });
         overlay.add_child(themeProbe);
@@ -334,9 +339,7 @@ export class RunningIndicators {
 
         try {
             this._settings.disconnect(handlerId);
-        } catch (_error) {
-            // The item may already be in teardown.
-        }
+        } catch (_error) {}
         item._chRunningSettingsChangedId = 0;
     }
 
@@ -397,9 +400,6 @@ export class RunningIndicators {
         const size = Number(iconSize);
         if (!Number.isFinite(size) || size <= 0) return;
 
-        // Keep the BinLayout preferred size synchronized with the actual
-        // overlay size. A stale preferred size of 1x1 makes CENTER alignment
-        // allocate the overlay using the wrong geometry after re-enable.
         if (overlay._chPreferredSize !== size) {
             overlay._chPreferredSize = size;
             overlay.queue_relayout();

@@ -18,11 +18,6 @@ const EFFECT_SETTINGS_KEYS = new Set([
     "grain",
 ]);
 
-/**
- * Applies the background sliders to GNOME Shell's real desktop wallpaper
- * actors. This controller intentionally lives for the whole extension
- * lifetime; it must not depend on Overview having been opened.
- */
 export class DesktopWallpaperEffectsController {
     constructor(settings, diagnostics = null) {
         this._settings = settings;
@@ -51,8 +46,6 @@ export class DesktopWallpaperEffectsController {
             () => this._syncManagers(),
         );
 
-        // On startup, GNOME can still be constructing its initial wallpaper
-        // managers. Sync now and once again after the current main-loop turn.
         this._syncManagers();
         this._initialSyncId = GLib.idle_add_once(
             GLib.PRIORITY_DEFAULT_IDLE,
@@ -93,9 +86,6 @@ export class DesktopWallpaperEffectsController {
     _syncManagers() {
         if (!this._enabled) return;
 
-        // GNOME Shell 50's LayoutManager owns the active desktop BackgroundManagers.
-        // Their actors are the real wallpaper actors under _backgroundGroup,
-        // unlike AltOverview's separate actors in overviewGroup.
         const managers = Main.layoutManager?._bgManagers;
         if (!Array.isArray(managers)) {
             this._syncGrainEffect();
@@ -189,19 +179,16 @@ export class DesktopWallpaperEffectsController {
         const actorChanged = actor !== entry.actor;
         entry.actor = actor;
 
-        const applyToWallpaper = this._settings.get_boolean("apply-to-wallpaper");
+        const applyToWallpaper =
+            this._settings.get_boolean("apply-to-wallpaper");
         const brightness = this._settings.get_int("brightness");
         const saturation = this._settings.get_double("saturation");
         const blur = this._settings.get_int("blur");
-        // Grain is applied once on _backgroundGroup, after per-wallpaper blur.
         const needsEffects =
-            brightness !== 0 ||
-            saturation !== 1.0 ||
-            blur !== 0;
+            brightness !== 0 || saturation !== 1.0 || blur !== 0;
 
         const actorAvailable = actor && !this._isActorDestroyed(actor);
         if (!applyToWallpaper || !needsEffects || !actorAvailable) {
-            // Also clean up a stale effect left behind by an interrupted reload.
             if (actorAvailable) removeBackgroundEffects(actor);
             this._deactivateEntry(entry);
             return;
@@ -238,8 +225,6 @@ export class DesktopWallpaperEffectsController {
     }
 
     _deactivateEntry(entry) {
-        // Clear BackgroundEffects' references first, then remove our named effects
-        // from every current or fading wallpaper actor we have touched.
         entry.effects.setActors(null, null);
         entry.effectsAttached = false;
 

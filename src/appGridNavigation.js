@@ -333,8 +333,6 @@ export class AppGridNavigation {
                 const indicators = this;
                 syncOwner._syncPageIndicators = function (...args) {
                     originalSyncIndicators.apply(this, args);
-                    // Keep GNOME's page preview calculations and reset its
-                    // translations on the independent navigation buttons.
                     indicators._lockNavigationButtons();
                 };
             }
@@ -348,10 +346,6 @@ export class AppGridNavigation {
     }
 
     _lockNavigationButtons() {
-        // Keep GNOME's own arrows in their native container. Its layout
-        // manager continues to allocate them even when custom arrows are used.
-        // Hiding them is safe; detaching them makes GNOME allocate actors that
-        // are no longer descendants of the stage.
         if (this._navigation) {
             for (const { button } of this._originalNavigationButtonStates) {
                 if (!button) continue;
@@ -401,8 +395,6 @@ export class AppGridNavigation {
             return;
         }
 
-        // Leave the original arrows in GNOME's scroll container: its
-        // BaseAppViewGridLayout still allocates these actors on every layout.
         if (pageIndicators.get_parent() === overlay)
             overlay.remove_child(pageIndicators);
 
@@ -442,7 +434,6 @@ export class AppGridNavigation {
                 orientation: Clutter.Orientation.HORIZONTAL,
                 spacing: 0,
             }),
-            // BinLayout must consider the navigation actor expandable to honor x_align/y_align.
             x_expand: true,
             y_expand: true,
         });
@@ -493,8 +484,6 @@ export class AppGridNavigation {
 
         const vertical = this._isVertical();
 
-        // Position navigation using the overlay BinLayout alignment.
-        // No per-frame coordinate calculation or translation is required.
         navigation.x_align = vertical
             ? Clutter.ActorAlign.END
             : Clutter.ActorAlign.CENTER;
@@ -510,9 +499,7 @@ export class AppGridNavigation {
             : `margin: 0px 0px ${AppGridNavigation.PAGE_INDICATOR_BOTTOM_MARGIN}px 0px !important; `;
 
         navigation.set_style(
-            "spacing: 0px !important; " +
-                margin +
-                "padding: 0px !important;",
+            "spacing: 0px !important; " + margin + "padding: 0px !important;",
         );
     }
 

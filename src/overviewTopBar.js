@@ -11,15 +11,6 @@ const THUMBNAIL_VERTICAL_OFFSET =
     (THUMBNAILS_BOX_HEIGHT - THUMBNAIL_HEIGHT) / 2;
 const TOP_BAR_SPACING = 20;
 
-/*
- * SearchEntryBin
- *     └── TopBar
- *         ├── SearchEntry
- *         └── ThumbnailsBox
- *
- * SearchEntryBin remains a direct child of ControlsManager, where GNOME
- * expects it to be.
- */
 const TopBar = GObject.registerClass(
     class TopBar extends St.Widget {
         _init() {
@@ -33,8 +24,7 @@ const TopBar = GObject.registerClass(
                 reactive: false,
                 x_expand: false,
                 y_expand: false,
-                style:
-                    "background-color: transparent; border: none; box-shadow: none;",
+                style: "background-color: transparent; border: none; box-shadow: none;",
             });
         }
 
@@ -74,8 +64,7 @@ export class OverviewTopBar {
     }
 
     create() {
-        if (this._topBar && !this._topBar.is_destroyed?.())
-            return true;
+        if (this._topBar && !this._topBar.is_destroyed?.()) return true;
 
         const searchEntry = this._searchEntry;
         const searchEntryBin = searchEntry?.get_parent();
@@ -120,12 +109,10 @@ export class OverviewTopBar {
             };
         }
 
-        this._originalThumbnailsAddThumbnails =
-            thumbnailsBox.addThumbnails;
+        this._originalThumbnailsAddThumbnails = thumbnailsBox.addThumbnails;
 
         if (typeof this._originalThumbnailsAddThumbnails === "function") {
-            const originalAddThumbnails =
-                this._originalThumbnailsAddThumbnails;
+            const originalAddThumbnails = this._originalThumbnailsAddThumbnails;
             const topBarController = this;
 
             this._wrappedThumbnailsAddThumbnails = function (...args) {
@@ -134,8 +121,7 @@ export class OverviewTopBar {
                 return result;
             };
 
-            thumbnailsBox.addThumbnails =
-                this._wrappedThumbnailsAddThumbnails;
+            thumbnailsBox.addThumbnails = this._wrappedThumbnailsAddThumbnails;
         }
 
         const originalStyle = this._originalThumbnailsStyle?.trim();
@@ -145,11 +131,11 @@ export class OverviewTopBar {
 
         thumbnailsBox.set_style(
             `${stylePrefix}` +
-            `padding: 0px !important; ` +
-            `border-width: 0px !important; ` +
-            `spacing: ${THUMBNAIL_SPACING}px !important; ` +
-            `margin-left: ${THUMBNAIL_EDGE_MARGIN}px !important; ` +
-            `margin-right: ${THUMBNAIL_EDGE_MARGIN}px !important;`,
+                `padding: 0px !important; ` +
+                `border-width: 0px !important; ` +
+                `spacing: ${THUMBNAIL_SPACING}px !important; ` +
+                `margin-left: ${THUMBNAIL_EDGE_MARGIN}px !important; ` +
+                `margin-right: ${THUMBNAIL_EDGE_MARGIN}px !important;`,
         );
 
         this._applyThumbnailVerticalOffset(thumbnailsBox);
@@ -210,8 +196,7 @@ export class OverviewTopBar {
         ];
 
         for (const actor of actors) {
-            if (!actor || actor.is_destroyed?.())
-                continue;
+            if (!actor || actor.is_destroyed?.()) continue;
 
             if (actor._altOverviewOriginalTranslationY === undefined)
                 actor._altOverviewOriginalTranslationY = actor.translation_y;
@@ -228,8 +213,7 @@ export class OverviewTopBar {
         ];
 
         for (const actor of actors) {
-            if (!actor || actor.is_destroyed?.())
-                continue;
+            if (!actor || actor.is_destroyed?.()) continue;
 
             if (actor._altOverviewOriginalTranslationY !== undefined) {
                 actor.translation_y = actor._altOverviewOriginalTranslationY;
@@ -240,8 +224,7 @@ export class OverviewTopBar {
 
     _updateThumbnailScale(thumbnailsBox) {
         const portholeHeight = thumbnailsBox?._porthole?.height;
-        if (!Number.isFinite(portholeHeight) || portholeHeight <= 0)
-            return;
+        if (!Number.isFinite(portholeHeight) || portholeHeight <= 0) return;
 
         thumbnailsBox._maxThumbnailScale = Math.min(
             1,
@@ -252,8 +235,7 @@ export class OverviewTopBar {
 
     updateSearchEntry(show) {
         const searchEntry = this._searchEntry;
-        if (!searchEntry || searchEntry.is_destroyed?.())
-            return;
+        if (!searchEntry || searchEntry.is_destroyed?.()) return;
 
         searchEntry.visible = show;
         searchEntry.set_height(show ? -1 : 0);
@@ -375,8 +357,7 @@ export class OverviewTopBar {
         this._thumbnailLayoutSpacer = null;
 
         if (topBar && !topBar.is_destroyed?.()) {
-            if (topBar.get_parent())
-                topBar.get_parent().remove_child(topBar);
+            if (topBar.get_parent()) topBar.get_parent().remove_child(topBar);
             topBar.destroy();
         }
 

@@ -86,9 +86,7 @@ export class IconGridEntranceController {
 
         try {
             global.compositor?.get_laters?.()?.remove(this._laterId);
-        } catch (_error) {
-            // The compositor may already be tearing down.
-        }
+        } catch (_error) {}
 
         this._laterId = 0;
     }

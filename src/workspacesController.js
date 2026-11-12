@@ -7,11 +7,6 @@ import { WorkspacesView } from "resource:///org/gnome/shell/ui/workspacesView.js
 export class WorkspacesController {
     constructor(settings, workspacesView, workspacesDisplay) {
         this._settings = settings;
-        /*
-         * Do not retain a WorkspacesView instance here. GNOME destroys and
-         * recreates these views on every Overview hide/show cycle. Resolve
-         * the current primary view from WorkspacesDisplay when needed.
-         */
         this._workspacesView = null;
         this._workspacesDisplay = workspacesDisplay;
         this._destroyed = false;
@@ -63,12 +58,10 @@ export class WorkspacesController {
     }
 
     _getCurrentWorkspacesView() {
-        if (this._destroyed)
-            return null;
+        if (this._destroyed) return null;
 
         const views = this._workspacesDisplay?._workspacesViews;
-        if (!views?.length)
-            return null;
+        if (!views?.length) return null;
 
         const primaryIndex = Number.isInteger(
             this._workspacesDisplay?._primaryIndex,
@@ -80,8 +73,7 @@ export class WorkspacesController {
     }
 
     updateOrientation() {
-        if (this._destroyed)
-            return;
+        if (this._destroyed) return;
 
         const vertical =
             this._settings.get_string("workspaces-scroll-direction") ===
@@ -89,11 +81,6 @@ export class WorkspacesController {
 
         this._setWorkspaceLayout(vertical);
 
-        /*
-         * Do not rebuild WorkspacesView here. GNOME's WorkspacesDisplay owns
-         * that lifecycle. We only need to relayout the current view after the
-         * workspace layout direction changes.
-         */
         this._getCurrentWorkspacesView()?.queue_relayout();
 
         this._workspacesDisplay?._updateTrackerOrientation();
@@ -124,8 +111,7 @@ export class WorkspacesController {
     }
 
     _queueWorkspaceRelayout() {
-        if (this._destroyed)
-            return;
+        if (this._destroyed) return;
 
         const workspacesViews = this._workspacesDisplay?._workspacesViews;
 
@@ -168,10 +154,6 @@ export class WorkspacesController {
             -1,
         );
 
-        /*
-         * The cached WorkspacesView may already be destroyed here. Never touch
-         * it during teardown; only update the persistent WorkspacesDisplay.
-         */
         this._workspacesDisplay?._updateTrackerOrientation();
         this._queueWorkspaceRelayout();
     }

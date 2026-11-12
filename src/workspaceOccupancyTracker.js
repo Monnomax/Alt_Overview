@@ -36,12 +36,10 @@ export class WorkspaceOccupancyTracker {
         const windows = new Set();
         for (let i = 0; i < workspaceManager.n_workspaces; i++) {
             const workspace = workspaceManager.get_workspace_by_index(i);
-            for (const window of workspace.list_windows())
-                windows.add(window);
+            for (const window of workspace.list_windows()) windows.add(window);
         }
 
-        for (const window of windows)
-            this._trackWindow(window);
+        for (const window of windows) this._trackWindow(window);
 
         this.refresh();
     }
@@ -66,9 +64,7 @@ export class WorkspaceOccupancyTracker {
             for (const id of signalIds) {
                 try {
                     window.disconnect(id);
-                } catch (_error) {
-                    // The window may already have been unmanaged.
-                }
+                } catch (_error) {}
             }
         }
 
@@ -86,8 +82,7 @@ export class WorkspaceOccupancyTracker {
     }
 
     _trackWindow(window) {
-        if (!window || this._trackedWindowSignals.has(window))
-            return;
+        if (!window || this._trackedWindowSignals.has(window)) return;
 
         const workspaceChangedId = window.connect("workspace-changed", () =>
             this._scheduleUpdate(),
@@ -96,18 +91,18 @@ export class WorkspaceOccupancyTracker {
             this._trackedWindowSignals.delete(window);
             try {
                 window.disconnect(workspaceChangedId);
-            } catch (_error) {
-                // The window may already have been unmanaged.
-            }
+            } catch (_error) {}
             this._scheduleUpdate();
         });
 
-        this._trackedWindowSignals.set(window, [workspaceChangedId, unmanagedId]);
+        this._trackedWindowSignals.set(window, [
+            workspaceChangedId,
+            unmanagedId,
+        ]);
     }
 
     _scheduleUpdate() {
-        if (this._workspaceOccupancySourceId)
-            return;
+        if (this._workspaceOccupancySourceId) return;
 
         this._workspaceOccupancySourceId = GLib.timeout_add(
             GLib.PRIORITY_DEFAULT,
@@ -126,14 +121,15 @@ export class WorkspaceOccupancyTracker {
 
         for (let i = 0; i < workspaceManager.n_workspaces; i++) {
             const workspace = workspaceManager.get_workspace_by_index(i);
-            const hasApplicationWindow = workspace.list_windows().some(
-                (window) =>
-                    APP_WINDOW_TYPES.has(window.get_window_type()) &&
-                    !window.is_on_all_workspaces?.(),
-            );
+            const hasApplicationWindow = workspace
+                .list_windows()
+                .some(
+                    (window) =>
+                        APP_WINDOW_TYPES.has(window.get_window_type()) &&
+                        !window.is_on_all_workspaces?.(),
+                );
 
-            if (hasApplicationWindow)
-                occupiedCount++;
+            if (hasApplicationWindow) occupiedCount++;
         }
 
         return occupiedCount;

@@ -42,13 +42,14 @@ export class ControlsLayoutPatch {
     }
 
     _setWorkspaceSize(workspaceBox, workAreaBox) {
-        if (!workspaceBox || !workAreaBox)
-            return;
+        if (!workspaceBox || !workAreaBox) return;
 
         const width = workAreaBox.get_width();
         const height = workAreaBox.get_height();
         if (
-            ![width, height, workAreaBox.x1, workAreaBox.y1].every(Number.isFinite) ||
+            ![width, height, workAreaBox.x1, workAreaBox.y1].every(
+                Number.isFinite,
+            ) ||
             width <= 0 ||
             height <= 0
         )
@@ -62,7 +63,9 @@ export class ControlsLayoutPatch {
         const y = workAreaBox.y1 + (height - workspaceHeight) / 2;
 
         if (
-            ![userSize, scale, workspaceWidth, workspaceHeight, x, y].every(Number.isFinite) ||
+            ![userSize, scale, workspaceWidth, workspaceHeight, x, y].every(
+                Number.isFinite,
+            ) ||
             scale <= 0 ||
             workspaceWidth <= 0 ||
             workspaceHeight <= 0
@@ -106,9 +109,9 @@ export class ControlsLayoutPatch {
                 return;
 
             const show =
-                (patch._settings?.get_boolean(
-                    "show-workspaces-thumbnails",
-                ) ?? true) && patch._hasMultipleWorkspaces();
+                (patch._settings?.get_boolean("show-workspaces-thumbnails") ??
+                    true) &&
+                patch._hasMultipleWorkspaces();
 
             const [opacity, scale, translationY] =
                 this._getThumbnailsBoxParams();
@@ -153,12 +156,15 @@ export class ControlsLayoutPatch {
             if (state === ControlsState.WINDOW_PICKER && workAreaBox)
                 patch._setWorkspaceSize(workspaceBox, workAreaBox);
 
-            if (state === ControlsState.APP_GRID && workspaceBox && workAreaBox) {
+            if (
+                state === ControlsState.APP_GRID &&
+                workspaceBox &&
+                workAreaBox
+            ) {
                 const x = workAreaBox.x2 + 1000000;
                 const y = workAreaBox.y2 + 1000000;
                 if ([x, y].every(Number.isFinite)) {
                     workspaceBox.set_origin(x, y);
-                    // Keep the workspace allocation valid while it is off-screen.
                 }
             }
 
@@ -169,29 +175,24 @@ export class ControlsLayoutPatch {
             state,
             ...args
         ) {
-            const appDisplayBox =
-                patch._originalGetAppDisplayBoxForState.call(
-                    this,
-                    state,
-                    ...args,
-                );
+            const appDisplayBox = patch._originalGetAppDisplayBoxForState.call(
+                this,
+                state,
+                ...args,
+            );
 
             if (state === ControlsState.APP_GRID && appDisplayBox) {
                 const layoutBox = args[0];
                 const layoutWidth = layoutBox?.get_width?.();
                 if (
-                    [layoutBox?.x1, layoutBox?.y2, layoutWidth].every(Number.isFinite) &&
+                    [layoutBox?.x1, layoutBox?.y2, layoutWidth].every(
+                        Number.isFinite,
+                    ) &&
                     layoutWidth > 0 &&
                     layoutBox.y2 > 0
                 ) {
-                    // GNOME offsets the box top to the work area but keeps
-                    // y2 at the monitor bottom. Extend AppDisplay to the full
-                    // monitor by starting at y=0 and using that bottom edge.
                     appDisplayBox.set_origin(layoutBox.x1, 0);
-                    appDisplayBox.set_size(
-                        layoutWidth,
-                        layoutBox.y2,
-                    );
+                    appDisplayBox.set_size(layoutWidth, layoutBox.y2);
                 }
             }
 
@@ -225,7 +226,6 @@ export class ControlsLayoutPatch {
                                 x = layoutBox.x2;
                                 break;
                             case "grow-in-place":
-                                // Keep AppDisplay at its final full-screen position.
                                 break;
                             default:
                                 return appDisplayBox;
@@ -244,8 +244,6 @@ export class ControlsLayoutPatch {
             this._controls._getThumbnailsBoxParams = function () {
                 const { initialState, finalState, progress } =
                     this._stateAdjustment.getStateTransitionParams();
-                // An invalid transition fraction must never reach Clutter
-                // properties. Snap to the target state if GNOME reports NaN.
                 const safeProgress = Number.isFinite(progress)
                     ? Math.max(0, Math.min(1, progress))
                     : 1;
@@ -281,7 +279,9 @@ export class ControlsLayoutPatch {
                     lerp(initial.scale, final.scale),
                     lerp(initial.translationY, final.translationY),
                 ];
-                return values.map(value => Number.isFinite(value) ? value : 0);
+                return values.map((value) =>
+                    Number.isFinite(value) ? value : 0,
+                );
             };
         }
 
@@ -289,8 +289,7 @@ export class ControlsLayoutPatch {
     }
 
     _unpatch() {
-        if (!this._layoutManager)
-            return;
+        if (!this._layoutManager) return;
 
         if (this._originalComputeWorkspacesBoxForState) {
             this._layoutManager._computeWorkspacesBoxForState =

@@ -106,7 +106,6 @@ export const MonitorBackground = GObject.registerClass(
 
             this._cleanedUp = true;
 
-            // Disconnect BackgroundManager signal.
             if (this._changedId) {
                 try {
                     this._bgManager?.disconnect(this._changedId);
@@ -122,7 +121,6 @@ export const MonitorBackground = GObject.registerClass(
                 this._changedId = 0;
             }
 
-            // Detach effects from the wallpaper actor.
             try {
                 this.effects?.setActors(null, this);
             } catch (error) {
@@ -134,7 +132,6 @@ export const MonitorBackground = GObject.registerClass(
                 );
             }
 
-            // Destroy BackgroundManager.
             try {
                 this._bgManager?.destroy();
             } catch (error) {

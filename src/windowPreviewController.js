@@ -47,13 +47,6 @@ export class WindowPreviewController {
             },
         );
 
-        /*
-         * Keep GNOME's original showOverlay() completely intact.
-         *
-         * In "hidden" mode, temporarily suppress only title.show().
-         * GNOME can therefore continue handling the rest of the overlay
-         * normally: close button, animations, scaling, etc.
-         */
         this._injectionManager.overrideMethod(
             previewPrototype,
             "showOverlay",
@@ -79,16 +72,7 @@ export class WindowPreviewController {
 
                     const originalShow = title.show;
 
-                    /*
-                     * Make GNOME's title.show() a no-op only while the
-                     * original showOverlay() is executing.
-                     */
                     title.show = function () {};
-
-                    /*
-                     * Make sure the title is already invisible in case
-                     * hidden mode was selected while the overlay was shown.
-                     */
                     title.remove_all_transitions();
                     title.hide();
                     title.opacity = 0;
@@ -97,12 +81,6 @@ export class WindowPreviewController {
                         originalMethod.call(this, animate);
                     } finally {
                         title.show = originalShow;
-
-                        /*
-                         * GNOME's original showOverlay() may have changed
-                         * opacity through ease(), so force the hidden state
-                         * once more after it has finished.
-                         */
                         title.remove_all_transitions();
                         title.hide();
                         title.opacity = 0;
@@ -111,11 +89,6 @@ export class WindowPreviewController {
             },
         );
 
-        /*
-         * GNOME calculates the native icon/title position here.
-         * Keep that calculation intact and apply our tooltip position
-         * afterwards.
-         */
         this._injectionManager.overrideMethod(
             previewPrototype,
             "_adjustOverlayOffsets",
@@ -189,7 +162,6 @@ export class WindowPreviewController {
                     try {
                         originalMethod.call(this, ...args);
                     } catch (error) {
-                        // GNOME may dispose the preview while its overlay is updating.
                         if (
                             !controller._isActorUsable(this) ||
                             !controller._isActorUsable(container)
@@ -229,13 +201,6 @@ export class WindowPreviewController {
             this._tooltipPositionChangedId = 0;
         }
 
-        /*
-         * Restore GNOME's methods before touching preview actors. During DND
-         * or workspace teardown, a preview can still be in the Set while one
-         * of its child actors has already been destroyed. The injected
-         * _adjustOverlayOffsets() also applies our custom position, so it must
-         * not be used to restore the native state.
-         */
         try {
             this._injectionManager.clear();
         } catch (error) {
@@ -297,8 +262,6 @@ export class WindowPreviewController {
                     title.opacity = 255;
                 }
 
-                // The injection was cleared above; this calls GNOME's native
-                // method to restore its original overlay position.
                 preview._adjustOverlayOffsets?.();
 
                 const closeButton = preview._closeButton;
@@ -352,7 +315,6 @@ export class WindowPreviewController {
                     preview._overlayShown &&
                     preview._windowCanClose();
 
-                // Check again immediately before mutating the actor.
                 if (
                     !this._isActorUsable(preview) ||
                     !this._isActorUsable(closeButton) ||
@@ -426,11 +388,6 @@ export class WindowPreviewController {
 
         if (!this._isActorUsable(parent)) return;
 
-        /*
-         * Hidden:
-         * showOverlay() itself prevents GNOME from calling title.show().
-         * Keep the title hidden here as well for immediate settings changes.
-         */
         if (position === "hidden") {
             title.remove_all_transitions();
             title.hide();
@@ -438,19 +395,11 @@ export class WindowPreviewController {
             return;
         }
 
-        /*
-         * Native GNOME position:
-         * 12 px below the icon.
-         */
         if (position === "below") {
             parent.set_child_below_sibling(title, icon);
             return;
         }
 
-        /*
-         * Above:
-         * exactly 12 px above the icon.
-         */
         const iconTop = icon.allocation.y1 + icon.translation_y;
 
         const titleHeight = title.allocation.get_height();

@@ -190,8 +190,6 @@ export class AppGridLayoutController {
             };
         }
 
-        // The scroll view covers the full grid, including its empty space.
-        // Let child icons remain pickable while blank areas pass clicks through.
         scrollView.reactive = false;
 
         const fadeOffset = this._settings.get_int("app-grid-edge-fade");
@@ -365,8 +363,6 @@ export class AppGridLayoutController {
             this.columns_per_page = cols;
             this.rows_per_page = rows;
 
-            // Check whether the current page distribution matches
-            // the configured grid capacity.
             const itemsPerPage = cols * rows;
             const pages = Array.isArray(this._pages) ? this._pages : [];
 
@@ -395,9 +391,6 @@ export class AppGridLayoutController {
                     ));
 
             if (columnsChanged || rowsChanged || pageDistributionChanged) {
-                /*
-                 * First pass: fill vacancies between existing pages.
-                 */
                 const fillItemVacancies = () => {
                     if (typeof this._fillItemVacancies !== "function") return;
 
@@ -411,15 +404,9 @@ export class AppGridLayoutController {
 
                 fillItemVacancies();
 
-                /*
-                 * Redistribute surplus items according to the new capacity.
-                 */
                 if (typeof this._updatePages === "function")
                     this._updatePages();
 
-                /*
-                 * Second pass: compact any remaining incomplete pages.
-                 */
                 fillItemVacancies();
 
                 this._childrenMaxSize = -1;
@@ -462,23 +449,12 @@ export class AppGridLayoutController {
 
             const baseIconSize = this._iconSize;
 
-            /*
-             * КРОК 1: фіксуємо "нормальний" (не залежний від
-             * app-grid-icon-size) розмір кожного AppIcon-tile.
-             *
-             * Це має відбутись ДО будь-яких вимірювань geometry
-             * (childWidth/childHeight нижче, slot-fit scale тощо),
-             * інакше обраний режим розміру іконки впливатиме на
-             * розмір AppIcon/grid-cell.
-             */
             for (let i = 0; i < gridActor.get_n_children(); i++)
                 controller._iconController.lockTileSize(
                     gridActor.get_child_at_index(i),
                     baseIconSize,
                 );
 
-            // КРОК 2: вимірюємо slot-fit геометрію, поки іконки ще
-            // у своєму "нормальному" (nominalSize) стані.
             const child = gridActor.get_child_at_index(0);
             const iconBin = child?.icon?._iconBin;
 
@@ -502,13 +478,6 @@ export class AppGridLayoutController {
                     slotHeight / childHeight,
                 );
 
-            // КРОК 3: застосовуємо обраний режим розміру ЛИШЕ до графічної
-            // іконки всередині кожного AppIcon.
-            //
-            //    ВАЖЛИВО: це відбувається ПІСЛЯ вимірювання childWidth/
-            //    childHeight та обчислення slot-fit scale вище, тому обраний
-            //    режим розміру іконки більше не впливає на цю геометрію —
-            //    змінюється лише сама графічна іконка всередині AppIcon.
             const mode = controller._settings.get_string(
                 "app-grid-names-visibility",
             );
@@ -518,10 +487,6 @@ export class AppGridLayoutController {
 
                 item.set_pivot_point(0.5, 0.5);
 
-                /*
-                 * AppIcon НІКОЛИ не масштабується.
-                 * Його візуальний розмір завжди 150×150.
-                 */
                 item.set_scale(1.0, 1.0);
 
                 controller._iconController.applyNameVisibilityMode(item, mode);

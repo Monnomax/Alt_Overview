@@ -11,7 +11,6 @@ const EFFECT_NAMES = {
     grain: "overview-bg-grain",
 };
 
-/** Remove AltOverview's named effects from an actor, if it is still alive. */
 export function removeBackgroundEffects(actor) {
     if (!actor || actor._destroyed || actor.is_destroyed?.()) return;
 
@@ -142,8 +141,6 @@ export const GrainEffect = GObject.registerClass(
         }
 
         setAmount(percent) {
-            // A small amplitude makes the default value effectively invisible.
-            // Keep the 0–100 slider range perceptible across the full range.
             const value = (percent / 100) * 0.2;
             if (this._amount === value) return;
             this._amount = value;
@@ -206,8 +203,6 @@ export class BackgroundEffects {
         );
         blurEffect?.setBlur(this._blur);
 
-        // Grain can be attached to a parent/container separately from the
-        // wallpaper actor. This lets grain render after the actor's blur.
         if (grainActor) {
             const grainEffect = this._getOrAttach(
                 grainActor,

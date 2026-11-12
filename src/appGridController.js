@@ -33,7 +33,7 @@ export class AppGridController {
 
         if (this._initialRedisplaySourceId) {
             GLib.source_remove(this._initialRedisplaySourceId);
-            }
+        }
 
         if (appDisplay && this._originalLoadApps) {
             appDisplay._loadApps = this._originalLoadApps;
@@ -132,16 +132,10 @@ export class AppGridController {
 
         const appDisplay = this._appDisplay;
 
-        for (
-            let actor = source;
-            actor;
-            actor = actor.get_parent?.()
-        ) {
-            if (actor === appDisplay)
-                return true;
+        for (let actor = source; actor; actor = actor.get_parent?.()) {
+            if (actor === appDisplay) return true;
 
-            if (actor === appDisplay?._grid)
-                return true;
+            if (actor === appDisplay?._grid) return true;
         }
 
         return false;

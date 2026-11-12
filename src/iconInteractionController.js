@@ -59,13 +59,6 @@ export class IconInteractionController {
             appDisplay,
         );
 
-        /*
-         * GNOME 50.1 BaseAppView._onDestroy() does not reset
-         * FolderView drag-page-switch timeouts.
-         *
-         * Cancel them during unmap instead of connecting additional
-         * JavaScript callbacks to the actor's destroy signal.
-         */
         this._folderViewInjectionManager = new InjectionManager();
 
         this._folderViewInjectionManager.overrideMethod(
@@ -120,9 +113,7 @@ export class IconInteractionController {
         try {
             if (GObject.signal_handler_is_connected(actor, handlerId))
                 actor.disconnect(handlerId);
-        } catch (_error) {
-            // The actor or its signal connection may already be gone.
-        }
+        } catch (_error) {}
     }
 
     _removeActionSafely(actor, action) {
@@ -133,9 +124,7 @@ export class IconInteractionController {
 
             if (!actions || actions.includes(action))
                 actor.remove_action(action);
-        } catch (_error) {
-            // The actor may have been disposed during DND teardown.
-        }
+        } catch (_error) {}
     }
 
     updateNamesVisibility() {
@@ -174,7 +163,6 @@ export class IconInteractionController {
         const items = new Set();
         const folderItems = new Set();
 
-        // Основна сітка.
         if (grid) {
             for (let index = 0; index < grid.get_n_children(); index++) {
                 const item = grid.get_child_at_index(index);
@@ -182,7 +170,6 @@ export class IconInteractionController {
             }
         }
 
-        // Вміст усіх FolderView, які відстежує контролер.
         for (const folderView of folderViews) {
             if (!this._isActorUsable(folderView)) continue;
 
@@ -193,24 +180,15 @@ export class IconInteractionController {
                     items.add(item);
                     folderItems.add(item);
                 }
-            } catch (_error) {
-                // FolderView може перебувати на етапі знищення.
-            }
+            } catch (_error) {}
         }
 
-        /*
-         * BaseAppView._onDestroy() не скасовує таймери
-         * перемикання сторінок FolderView.
-         * Очищаємо їх перед від'єднанням нашого override.
-         */
         for (const folderView of folderViews) {
             if (!this._isActorUsable(folderView)) continue;
 
             try {
                 folderView._resetDragPageSwitch?.();
-            } catch (_error) {
-                // FolderView може вже перебувати на етапі знищення.
-            }
+            } catch (_error) {}
         }
 
         this._folderViewInjectionManager?.clear();
@@ -231,11 +209,6 @@ export class IconInteractionController {
         for (const item of items) {
             if (!item || !this._isActorUsable(item)) continue;
 
-            /*
-             * FolderView AppIcon не проходить через звичайний шлях
-             * налаштування взаємодії. Відновлюємо лише те, що змінили:
-             * видимість підпису та native LongPressGesture.
-             */
             if (folderItems.has(item)) {
                 const baseIconRef = item.icon;
                 const baseIcon =
@@ -266,9 +239,7 @@ export class IconInteractionController {
 
                         if (!actions.includes(item._chFolderLongPressGesture))
                             item.add_action(item._chFolderLongPressGesture);
-                    } catch (_error) {
-                        // AppIcon може вже завершувати знищення.
-                    }
+                    } catch (_error) {}
 
                     item._chFolderLongPressGesture = null;
                 }
@@ -366,11 +337,8 @@ export class IconInteractionController {
 
             try {
                 this._runningIndicators.restore(item, icon, iconBin);
-            } catch (_error) {
-                // Індикатор може втратити свій актор під час teardown.
-            }
+            } catch (_error) {}
 
-            // Відновлюємо початкове вертикальне вирівнювання GNOME.
             if (iconBin && iconBin._chOriginalIconBinYAlign !== undefined) {
                 iconBin.y_align = iconBin._chOriginalIconBinYAlign;
                 delete iconBin._chOriginalIconBinYAlign;
@@ -435,9 +403,7 @@ export class IconInteractionController {
 
                 try {
                     item.add_action(gesture);
-                } catch (_error) {
-                    // AppIcon може вже завершувати знищення.
-                }
+                } catch (_error) {}
 
                 item._chDndGesture = null;
                 item._chDndGestureActor = null;
@@ -446,9 +412,7 @@ export class IconInteractionController {
             if (item._chDndReactiveLockId) {
                 try {
                     item._draggable?.disconnect(item._chDndReactiveLockId);
-                } catch (_error) {
-                    // Draggable may already have disconnected.
-                }
+                } catch (_error) {}
 
                 item._chDndReactiveLockId = 0;
             }
@@ -653,11 +617,6 @@ export class IconInteractionController {
             );
         }
 
-        /*
-         * popupMenu() відкриває меню раніше, ніж обгортка
-         * встигає підключити open-state-changed.
-         * Тому окремо перевіряємо його поточний стан.
-         */
         if (menu.isOpen && !item._chContextMenuOpen) {
             item._chContextMenuOpen = true;
             this._syncIconHoverWithContextMenu(item, true);
@@ -777,15 +736,6 @@ export class IconInteractionController {
             if (actor && !this._isActorUsable(actor)) return;
         }
 
-        /*
-         * AppIcon всередині FolderView залишаємо максимально близьким
-         * до native GNOME:
-         *
-         * - DnD залишається на самому AppViewItem;
-         * - native right-click залишається;
-         * - прибираємо лише LongPressGesture, яка перехоплює
-         *   утримання ЛКМ і викликає popupMenu().
-         */
         if (isFolderViewItem) {
             item._chFolderViewInteractionHandled = true;
             this._removeFolderLongPressGesture(item);
@@ -832,15 +782,6 @@ export class IconInteractionController {
         const oldIcon = item._chHoverIcon;
 
         if (oldIcon && oldIcon !== icon) {
-            /*
-             * GNOME may dispose the previous BaseIcon child before
-             * AppGrid relayout reaches this method.
-             *
-             * Do not call GObject or Clutter methods on oldIcon.
-             * Its signals and actions belong to the old actor and
-             * are released with its destruction.
-             */
-
             item._chIconEnterId = 0;
             item._chIconLeaveId = 0;
             item._chIconHovered = false;
@@ -922,13 +863,6 @@ export class IconInteractionController {
 
         const dragGesture = item?._draggable?.startGesture;
 
-        /*
-         * FolderIcon is already reactive. Keep its native DND gesture
-         * attached to the AppViewItem that owns the Draggable.
-         *
-         * Regular AppIcons remain unchanged: their gesture is moved to
-         * the inner icon because their parent actor is non-reactive.
-         */
         if (dragGesture && !isFolder) {
             item.remove_action(dragGesture);
             icon.add_action(dragGesture);
@@ -941,20 +875,13 @@ export class IconInteractionController {
             const draggable = item._draggable;
 
             item._chDndReactiveLockId = draggable.connect("drag-end", () => {
-                /*
-                 * GNOME AppIcon._onDestroy() clears _draggable.
-                 * A folder creation can dispose the source AppIcon
-                 * before the drag-end signal is emitted.
-                 */
                 if (item._draggable !== draggable || !this._isActorUsable(item))
                     return;
 
                 try {
                     item.reactive = isFolder;
                     item.track_hover = false;
-                } catch (_error) {
-                    // The source actor may be entering teardown.
-                }
+                } catch (_error) {}
             });
         }
 
@@ -1059,7 +986,6 @@ export class IconInteractionController {
 
             const label = baseIcon.label;
 
-            // Context menu must preserve the hovered icon appearance.
             if (item._chContextMenuOpen) return Clutter.EVENT_PROPAGATE;
 
             item._chIconHovered = false;
@@ -1078,10 +1004,6 @@ export class IconInteractionController {
         });
 
         item._chPressHandlerId = item.connect("notify::pressed", () => {
-            /*
-             * pressed належить усій плитці 150x150.
-             * Анімацію запускаємо лише над графічною іконкою.
-             */
             if (this._isActorUsable(item) && item._chIconHovered)
                 this._animate(item, "press");
         });

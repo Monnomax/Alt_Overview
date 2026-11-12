@@ -12,7 +12,8 @@
         <key name="apply-to-wallpaper" type="b">
             <default>true</default>
             <summary>Застосувати до шпалер робочого стола</summary>
-            <description>Якщо увімкнено, параметри яскравості, розмиття, насиченості та зернистості застосовуються до шпалер робочого стола.</description>
+            <description>Якщо увімкнено, параметри яскравості, розмиття, насиченості та зернистості
+                застосовуються до шпалер робочого стола.</description>
         </key>
 
         <key name="brightness" type="i">
@@ -105,7 +106,8 @@
         <key name="close-on-middle-click" type="b">
             <default>true</default>
             <summary>Дія середнього кліку в Огляді</summary>
-            <description>Закривати вікно середнім кліком по його прев’ю або Огляд при кліку на порожньому тлі.</description>
+            <description>Закривати вікно середнім кліком по його прев’ю або Огляд при кліку на
+                порожньому тлі.</description>
         </key>
 
         <key name="workspaces-scroll-direction" type="s">
@@ -118,18 +120,20 @@
             <description>Напрямок прокручування коліщатком миші для перемикання робочих столів.</description>
         </key>
 
-                <key name="workspace-spacing-vertical" type="i">
+        <key name="workspace-spacing-vertical" type="i">
             <range min="0" max="100" />
             <default>30</default>
             <summary>Відстань між стільницями у вертикальному режимі</summary>
-            <description>Відстань у пікселях між сусідніми стільницями при вертикальному прокручуванні.</description>
+            <description>Відстань у пікселях між сусідніми стільницями при вертикальному
+                прокручуванні.</description>
         </key>
 
         <key name="workspace-spacing-horizontal" type="i">
             <range min="0" max="100" />
             <default>10</default>
             <summary>Відстань між стільницями у горизонтальному режимі</summary>
-            <description>Відстань у пікселях між сусідніми стільницями при горизонтальному прокручуванні.</description>
+            <description>Відстань у пікселях між сусідніми стільницями при горизонтальному
+                прокручуванні.</description>
         </key>
 
         <key name="workspace-size" type="i">
@@ -178,7 +182,8 @@
             <range min="0" max="200" />
             <default>70</default>
             <summary>Згасання по краях</summary>
-            <description>Розмір згасання по краях сітки програм у пікселях. 0 — вимкнути маски згасання.</description>
+            <description>Розмір згасання по краях сітки програм у пікселях. 0 — вимкнути маски
+                згасання.</description>
         </key>
 
 
@@ -213,21 +218,24 @@
         <key name="app-grid-running-indicator-dynamic-color" type="b">
             <default>true</default>
             <summary>Динамічний колір індикатора</summary>
-            <description>Якщо увімкнено, індикатор використовує усереднений колір піктограми програми. Якщо вимкнено — колір активного індикатора з теми GNOME Shell.</description>
+            <description>Якщо увімкнено, індикатор використовує усереднений колір піктограми
+                програми. Якщо вимкнено — колір активного індикатора з теми GNOME Shell.</description>
         </key>
 
         <key name="app-grid-running-indicator-position-x" type="i">
             <range min="-150" max="150" />
             <default>100</default>
             <summary>Позиція індикатора активних програм по горизонталі</summary>
-            <description>-100 — лівий край, 0 — центр, 100 — правий край; від'ємні та додатні значення за межами 100 виносять індикатор за іконку.</description>
+            <description>-100 — лівий край, 0 — центр, 100 — правий край; від'ємні та додатні
+                значення за межами 100 виносять індикатор за іконку.</description>
         </key>
 
         <key name="app-grid-running-indicator-position-y" type="i">
             <range min="-150" max="150" />
             <default>-100</default>
             <summary>Позиція індикатора активних програм по вертикалі</summary>
-            <description>-100 — верхній край, 0 — центр, 100 — нижній край; значення за межами 100 виносять індикатор за іконку.</description>
+            <description>-100 — верхній край, 0 — центр, 100 — нижній край; значення за межами 100
+                виносять індикатор за іконку.</description>
         </key>
 
         <key name="show-app-grid-navigation-buttons" type="b">
@@ -317,7 +325,8 @@
         <key name="app-grid-center-last-row" type="b">
             <default>true</default>
             <summary>Центрувати останній неповний рядок</summary>
-            <description>Центрувати останній рядок іконок, якщо в ньому менше елементів, ніж у повних рядках.</description>
+            <description>Центрувати останній рядок іконок, якщо в ньому менше елементів, ніж у
+                повних рядках.</description>
         </key>
 
         <key name="app-grid-names-visibility" type="s">
@@ -447,7 +456,8 @@
         <key name="diagnostics-last-runtime-state" type="s">
             <default>""</default>
             <summary>Останній знімок стану розширення</summary>
-            <description>Службовий знімок життєвого циклу, активних компонентів і середовища дисплеїв.</description>
+            <description>Службовий знімок життєвого циклу, активних компонентів і середовища
+                дисплеїв.</description>
         </key>
 
         <key name="diagnostics-last-error" type="s">

@@ -57,9 +57,7 @@ export class IconAppearanceController {
             try {
                 for (const item of folderView.getAllItems?.() ?? [])
                     processItem(item, true);
-            } catch (_error) {
-                // FolderView may be in the process of being destroyed.
-            }
+            } catch (_error) {}
         }
     }
 

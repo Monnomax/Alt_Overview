@@ -32,9 +32,7 @@ export class LayoutController {
         }
 
         if (!this._topBar.create()) {
-            this._topBar.updateSearchEntry(
-                this._shouldShowSearchEntry(),
-            );
+            this._topBar.updateSearchEntry(this._shouldShowSearchEntry());
             return;
         }
 
@@ -62,9 +60,7 @@ export class LayoutController {
                 this._searchEntry.clutter_text.disconnect(
                     this._searchEntryTextChangedId,
                 );
-            } catch (_error) {
-                // The search entry may already have been destroyed.
-            }
+            } catch (_error) {}
             this._searchEntryTextChangedId = 0;
         }
 
@@ -90,10 +86,8 @@ export class LayoutController {
 
     _shouldShowSearchEntry() {
         const mode = this._settings.get_string("search-entry-mode");
-        if (mode === "always")
-            return true;
-        if (mode === "never")
-            return false;
+        if (mode === "always") return true;
+        if (mode === "never") return false;
 
         return (this._searchEntry?.get_text?.() ?? "").trim().length > 0;
     }

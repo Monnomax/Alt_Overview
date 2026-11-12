@@ -225,20 +225,6 @@ export class DndManager {
 
         let dragLocation = rawDragLocation;
 
-        /*
-         * Keep GNOME 50's EMPTY_SPACE sentinel.
-         *
-         * -1 means "append".
-         * It must not be converted to the last icon position.
-         */
-
-        /*
-         * Extend the native horizontal edge zone.
-         *
-         * GNOME determines START_EDGE / END_EDGE using X even when
-         * the grid orientation is vertical. We intentionally keep
-         * that behavior.
-         */
         if (
             targetPosition >= 0 &&
             dragLocation === IconGrid.DragLocation.ON_ICON
@@ -284,12 +270,6 @@ export class DndManager {
             reflowDirection = Clutter.ActorAlign.START;
         }
 
-        /*
-         * Native GNOME 50 edge correction.
-         *
-         * Important: this is intentionally performed only for a
-         * real icon position. EMPTY_SPACE remains -1.
-         */
         const nColumns = grid.layout_manager.columns_per_page;
 
         if (
@@ -322,9 +302,6 @@ export class DndManager {
             }
         }
 
-        /*
-         * Diagnostics.
-         */
         const orientation =
             grid.layout_manager.orientation === Clutter.Orientation.VERTICAL
                 ? "vertical"
