@@ -1,5 +1,4 @@
 import Clutter from "gi://Clutter";
-import Meta from "gi://Meta";
 import St from "gi://St";
 
 export class AppGridNavigation {
@@ -10,7 +9,6 @@ export class AppGridNavigation {
 
     constructor(settings, appDisplay) {
         this._scrollDirectionChangedId = 0;
-        this._navigationAllocationSignals = [];
         this._settings = settings;
         this._appDisplay = appDisplay;
         this._originalParent = null;
@@ -24,7 +22,6 @@ export class AppGridNavigation {
         this._navigationButtonsChangedId = 0;
         this._originalNavigationButtonStates = [];
         this._navigation = null;
-        this._navigationPositionLaterId = 0;
         this._navigationButtonsSyncOwner = null;
         this._originalSyncIndicatorsVisibility = null;
         this._originalSyncIndicators = null;
@@ -445,8 +442,9 @@ export class AppGridNavigation {
                 orientation: Clutter.Orientation.HORIZONTAL,
                 spacing: 0,
             }),
-            x_expand: false,
-            y_expand: false,
+            // BinLayout must consider the navigation actor expandable to honor x_align/y_align.
+            x_expand: true,
+            y_expand: true,
         });
         navigation.set_style(
             "spacing: 0px !important; margin: 0px !important; padding: 0px !important;",
@@ -457,24 +455,6 @@ export class AppGridNavigation {
         overlay.add_child(navigation);
 
         this._navigation = navigation;
-        /*
-         * Recalculate navigation position when its geometry changes
-         * or when it becomes visible for the first time.
-         */
-        this._navigationAllocationSignals = [];
-
-        const updatePosition = () => this._updateNavigationPosition();
-
-        for (const actor of [overlay, navigation]) {
-            for (const signal of ["notify::allocation", "notify::mapped"]) {
-                const id = actor.connect(signal, updatePosition);
-
-                this._navigationAllocationSignals.push({
-                    actor,
-                    id,
-                });
-            }
-        }
         this._lockNavigationButtons();
     }
 
@@ -507,122 +487,35 @@ export class AppGridNavigation {
     }
 
     _updateNavigationPosition() {
-        if (this._navigationPositionLaterId) return;
-
-        const laters = global.compositor?.get_laters?.();
-        if (!laters) {
-            this._applyNavigationPosition();
-            return;
-        }
-
-        let attempts = 0;
-        this._navigationPositionLaterId = laters.add(
-            Meta.LaterType.BEFORE_REDRAW,
-            () => {
-                const navigation = this._navigation;
-                const overlay = this._appDisplay?._chOverlayContainer;
-
-                if (
-                    !navigation ||
-                    !overlay ||
-                    navigation.is_destroyed?.() ||
-                    overlay.is_destroyed?.()
-                ) {
-                    this._navigationPositionLaterId = 0;
-                    return false;
-                }
-
-                const dimensions = [
-                    navigation.width,
-                    navigation.height,
-                    overlay.width,
-                    overlay.height,
-                ];
-                const hasAllocation = dimensions.every(
-                    value => Number.isFinite(value) && value > 0,
-                );
-
-                if (!hasAllocation) {
-                    // Wait for Clutter's first real allocation. A pointer hover
-                    // must not be needed to trigger the missing relayout.
-                    attempts++;
-                    if (attempts < 30) return true;
-
-                    this._navigationPositionLaterId = 0;
-                    return false;
-                }
-
-                this._applyNavigationPosition();
-                this._navigationPositionLaterId = 0;
-                return false;
-            },
-        );
-    }
-
-    _applyNavigationPosition() {
         const navigation = this._navigation;
-        const overlay = this._appDisplay?._chOverlayContainer;
 
-        if (!navigation || !overlay) return;
-
-        const width = navigation.width;
-        const height = navigation.height;
-        const overlayWidth = overlay.width;
-        const overlayHeight = overlay.height;
-
-        if (
-            ![width, height, overlayWidth, overlayHeight].every(
-                Number.isFinite,
-            ) ||
-            width <= 0 ||
-            height <= 0 ||
-            overlayWidth <= 0 ||
-            overlayHeight <= 0
-        )
-            return;
+        if (!navigation) return;
 
         const vertical = this._isVertical();
 
-        let x;
-        let y;
+        // Position navigation using the overlay BinLayout alignment.
+        // No per-frame coordinate calculation or translation is required.
+        navigation.x_align = vertical
+            ? Clutter.ActorAlign.END
+            : Clutter.ActorAlign.CENTER;
+        navigation.y_align = vertical
+            ? Clutter.ActorAlign.CENTER
+            : Clutter.ActorAlign.END;
 
-        if (vertical) {
-            x =
-                overlayWidth -
-                width -
-                AppGridNavigation.PAGE_INDICATOR_EDGE_MARGIN;
+        navigation.translation_x = 0;
+        navigation.translation_y = 0;
 
-            y = (overlayHeight - height) / 2;
-        } else {
-            x = (overlayWidth - width) / 2;
+        const margin = vertical
+            ? `margin: 0px ${AppGridNavigation.PAGE_INDICATOR_EDGE_MARGIN}px 0px 0px !important; `
+            : `margin: 0px 0px ${AppGridNavigation.PAGE_INDICATOR_BOTTOM_MARGIN}px 0px !important; `;
 
-            y =
-                overlayHeight -
-                height -
-                AppGridNavigation.PAGE_INDICATOR_BOTTOM_MARGIN;
-        }
-
-        if (![x, y].every(Number.isFinite)) return;
-
-        const targetX = Math.round(x);
-        const targetY = Math.round(y);
-
-        // translation is an offset from the actor's allocated position.
-        const targetTranslationX = targetX - navigation.x;
-        const targetTranslationY = targetY - navigation.y;
-
-        if (![targetTranslationX, targetTranslationY].every(Number.isFinite))
-            return;
-
-        if (
-            Math.abs(navigation.translation_x - targetTranslationX) < 0.5 &&
-            Math.abs(navigation.translation_y - targetTranslationY) < 0.5
-        )
-            return;
-
-        navigation.translation_x = targetTranslationX;
-        navigation.translation_y = targetTranslationY;
+        navigation.set_style(
+            "spacing: 0px !important; " +
+                margin +
+                "padding: 0px !important;",
+        );
     }
+
     _updateNavigationButtonIcons(vertical) {
         if (this._previousButton) {
             this._previousButton.icon_name = vertical
@@ -700,14 +593,6 @@ export class AppGridNavigation {
         const navigation = this._navigation;
         if (!navigation) return;
 
-        for (const { actor, id } of this._navigationAllocationSignals) {
-            try {
-                actor.disconnect(id);
-            } catch (_error) {}
-        }
-
-        this._navigationAllocationSignals = [];
-
         const appDisplay = this._appDisplay;
         const pageIndicators = appDisplay?._pageIndicators;
 
@@ -716,13 +601,6 @@ export class AppGridNavigation {
 
         this._previousButton = null;
         this._nextButton = null;
-
-        if (this._navigationPositionLaterId) {
-            global.compositor?.get_laters?.()?.remove(
-                this._navigationPositionLaterId,
-            );
-            this._navigationPositionLaterId = 0;
-        }
 
         navigation.destroy();
         this._navigation = null;
