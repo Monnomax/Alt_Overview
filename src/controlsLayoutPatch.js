@@ -200,40 +200,42 @@ export class ControlsLayoutPatch {
                 const direction = patch._settings.get_string(
                     "app-grid-animation-direction",
                 );
-                if (direction !== "bottom-to-top") {
-                    const layoutBox = args[0];
-                    const width = layoutBox?.get_width?.();
-                    const height = layoutBox?.y2;
-                    if (
-                        [layoutBox?.x1, layoutBox?.x2, width, height].every(
-                            Number.isFinite,
-                        ) &&
-                        width > 0 &&
-                        height > 0 &&
-                        layoutBox.x2 > layoutBox.x1
-                    ) {
-                        let x = layoutBox.x1;
-                        let y = 0;
+                const layoutBox = args[0];
+                const width = layoutBox?.get_width?.();
+                const height = layoutBox?.y2;
 
-                        switch (direction) {
-                            case "left-to-right":
-                                x = layoutBox.x1 - width;
-                                break;
-                            case "top-to-bottom":
-                                y = -height;
-                                break;
-                            case "right-to-left":
-                                x = layoutBox.x2;
-                                break;
-                            case "grow-in-place":
-                                break;
-                            default:
-                                return appDisplayBox;
-                        }
+                if (
+                    [layoutBox?.x1, layoutBox?.x2, width, height].every(
+                        Number.isFinite,
+                    ) &&
+                    width > 0 &&
+                    height > 0 &&
+                    layoutBox.x2 > layoutBox.x1
+                ) {
+                    let x = layoutBox.x1;
+                    let y = 0;
 
-                        appDisplayBox.set_origin(x, y);
-                        appDisplayBox.set_size(width, height);
+                    switch (direction) {
+                        case "left-to-right":
+                            x = layoutBox.x1 - width;
+                            break;
+                        case "top-to-bottom":
+                            y = -height;
+                            break;
+                        case "right-to-left":
+                            x = layoutBox.x2;
+                            break;
+                        case "bottom-to-top":
+                            y = layoutBox.y2;
+                            break;
+                        case "grow-in-place":
+                            break;
+                        default:
+                            return appDisplayBox;
                     }
+
+                    appDisplayBox.set_origin(x, y);
+                    appDisplayBox.set_size(width, height);
                 }
             }
 

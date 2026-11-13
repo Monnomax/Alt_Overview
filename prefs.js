@@ -465,9 +465,9 @@ export default class OverviewBackgroundPreferences extends ExtensionPreferences 
         );
         overviewElementsGroup.add(dashRow);
 
-        // --- Налаштування кліків із Close Overview ---
+        // --- Закриття Overview  ---
         const closeOverviewGroup = new Adw.PreferencesGroup({
-            title: _("Налаштування кліків"),
+            title: _("Закриття Overview"),
         });
         page.add(closeOverviewGroup);
 

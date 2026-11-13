@@ -34,6 +34,13 @@ export default class CloseOverviewController {
 
         const button = event.get_button();
 
+        /*
+         * AppIcon займає всю плитку 150x150, але клікабельною
+         * графічною областю є лише внутрішній St.Icon.
+         *
+         * Обробляємо решту плитки як тло Overview ще на capture-фазі,
+         * до того, як подія потрапить до St.Button.
+         */
         if (button === 1 || button === 2 || button === 3) {
             const [x, y] = event.get_coords();
 
@@ -47,10 +54,12 @@ export default class CloseOverviewController {
 
                 if (this._settings.get_boolean(setting)) Main.overview.hide();
 
+                // Never propagate clicks from an empty AppIcon tile.
                 return Clutter.EVENT_STOP;
             }
         }
 
+        // A middle click closes a window preview or an Overview background.
         if (button === 2) {
             if (!this._settings.get_boolean("close-on-middle-click"))
                 return Clutter.EVENT_PROPAGATE;
@@ -58,6 +67,7 @@ export default class CloseOverviewController {
             return this._handleMiddleClick(event);
         }
 
+        // Only left and right clicks can close Overview.
         if (button !== 1 && button !== 3) return Clutter.EVENT_PROPAGATE;
 
         const setting =
@@ -85,7 +95,7 @@ export default class CloseOverviewController {
         const appDisplay = Main.overview?._overview?._controls?._appDisplay;
         const grid = appDisplay?._grid;
 
-        if (!grid) return false;
+        if (!appDisplay?.visible || !grid) return false;
 
         for (let index = 0; index < grid.get_n_children(); index++) {
             const item = grid.get_child_at_index(index);
@@ -95,6 +105,10 @@ export default class CloseOverviewController {
             const icon = item.icon.icon;
 
             try {
+                /*
+                 * Спочатку перевіряємо координати відносно плитки.
+                 * Це працює незалежно від item.reactive.
+                 */
                 const [tileValid, tileX, tileY] = item.transform_stage_point(
                     stageX,
                     stageY,
@@ -109,6 +123,10 @@ export default class CloseOverviewController {
                 )
                     continue;
 
+                /*
+                 * Якщо координати потрапляють у St.Icon,
+                 * це клік по графічній іконці, а не по тлу.
+                 */
                 if (icon.visible) {
                     const [iconValid, iconX, iconY] =
                         icon.transform_stage_point(stageX, stageY);
@@ -124,13 +142,16 @@ export default class CloseOverviewController {
                 }
 
                 return true;
-            } catch (_error) {}
+            } catch (_error) {
+                // Актор міг бути перебудований під час оновлення AppGrid.
+            }
         }
 
         return false;
     }
 
     _isBackgroundTarget(target) {
+        // Empty Overview background.
         if (
             typeof target.get_name === "function" &&
             target.get_name() === "overviewGroup"
@@ -138,6 +159,8 @@ export default class CloseOverviewController {
             return true;
         }
 
+        // This must be the actual reactive target, not just an ancestor,
+        // so clicks on AppGrid icons and folders continue to work normally.
         if (
             typeof target.get_style_class_name === "function" &&
             target.get_style_class_name() === "apps-scroll-view"
@@ -145,6 +168,8 @@ export default class CloseOverviewController {
             return true;
         }
 
+        // WindowPicker may return an actor inside a workspace. Stop at a
+        // WindowPreview so clicking a real window does not close Overview.
         let current = target;
 
         while (current) {
@@ -172,11 +197,14 @@ export default class CloseOverviewController {
         );
         const windowPreview = this._getWindowPreview(target);
 
+        // Middle click on a WindowPreview closes that window.
         if (windowPreview?.metaWindow) {
             windowPreview.metaWindow.delete(global.get_current_time());
             return Clutter.EVENT_STOP;
         }
 
+        // Middle click on empty Overview, AppGrid, or workspace background
+        // closes Overview.
         if (!target || this._isBackgroundTarget(target)) {
             Main.overview.hide();
             return Clutter.EVENT_STOP;
