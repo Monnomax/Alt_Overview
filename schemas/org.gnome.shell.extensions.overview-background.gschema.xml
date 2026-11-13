@@ -307,8 +307,6 @@
 
         <key name="app-grid-icon-size" type="s">
             <choices>
-                <choice value="smallest" />
-                <choice value="small" />
                 <choice value="normal" />
                 <choice value="large" />
                 <choice value="largest" />
@@ -317,8 +315,8 @@
             <summary>Розмір іконок сітки програм</summary>
             <description>
                 Розмір іконок відносно розміру, автоматично визначеного GNOME:
-                "smallest" — 80%, "small" — 90%, "normal" — 100%,
-                "large" — 110%, "largest" — 120%.
+                "normal" — найменший доступний розмір, "large" — середній,
+                "largest" — найбільший.
             </description>
         </key>
 

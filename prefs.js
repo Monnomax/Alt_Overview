@@ -28,9 +28,8 @@ const APP_GRID_ANIMATION_DIRECTIONS = [
 ];
 
 // Індекси відповідають порядку рядків у Gtk.StringList для рядка
-// "Розмір" у групі "Іконки" — значення в px застосовуються
-// в extension.js (див. ICON_SIZE_PX там же).
-const APP_GRID_ICON_SIZE = ["smallest", "small", "normal", "large", "largest"];
+// "Розмір" у групі "Іконки".
+const APP_GRID_ICON_SIZE = ["normal", "large", "largest"];
 
 const APP_GRID_ORDER = [
     "manual",
@@ -511,7 +510,7 @@ export default class OverviewBackgroundPreferences extends ExtensionPreferences 
         const sizeControl = this._buildSettingsButtonRegulator(
             settings,
             "workspace-size",
-            { lower: -100, upper: 100, step: 1 },
+            { lower: -50, upper: 50, step: 5 },
         );
         sizeRow.add_suffix(sizeControl.button);
         sizeGroup.add(sizeRow);
@@ -731,11 +730,9 @@ export default class OverviewBackgroundPreferences extends ExtensionPreferences 
         const iconSizeDropdown = new Gtk.DropDown({
             model: new Gtk.StringList({
                 strings: [
-                    _("Найменший"),
                     _("Малий"),
-                    _("Звичайний"),
+                    _("Середній"),
                     _("Великий"),
-                    _("Найбільший"),
                 ],
             }),
             valign: Gtk.Align.CENTER,
@@ -745,7 +742,7 @@ export default class OverviewBackgroundPreferences extends ExtensionPreferences 
         const currentIconSizeIndex =
             APP_GRID_ICON_SIZE.indexOf(currentIconSizeValue);
         iconSizeDropdown.set_selected(
-            currentIconSizeIndex >= 0 ? currentIconSizeIndex : 2,
+            currentIconSizeIndex >= 0 ? currentIconSizeIndex : 0,
         );
 
         iconSizeDropdown.connect("notify::selected", () => {

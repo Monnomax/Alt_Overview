@@ -1,7 +1,5 @@
 import Clutter from "gi://Clutter";
 export const APP_ICON_SIZES = {
-    smallest: 60,
-    small: 70,
     normal: 80,
     large: 90,
     largest: 100,
