@@ -32,6 +32,13 @@ export default class CloseOverviewController {
     _handleButtonPress(event) {
         if (!Main.overview.visible) return Clutter.EVENT_PROPAGATE;
 
+        // Ignore pointer events originating from the on-screen keyboard.
+        const keyboardBox = Main.layoutManager?.keyboardBox;
+        const eventActor = global.stage.get_event_actor(event);
+
+        if (eventActor && keyboardBox?.contains(eventActor))
+            return Clutter.EVENT_PROPAGATE;
+
         const button = event.get_button();
 
         /*
@@ -52,7 +59,8 @@ export default class CloseOverviewController {
                           ? "close-on-right-click"
                           : "close-on-middle-click";
 
-                if (this._settings.get_boolean(setting)) Main.overview.hide();
+                if (this._settings.get_boolean(setting))
+                    Main.overview.hide();
 
                 // Never propagate clicks from an empty AppIcon tile.
                 return Clutter.EVENT_STOP;
@@ -92,7 +100,8 @@ export default class CloseOverviewController {
     }
 
     _isAppIconTileBackground(stageX, stageY) {
-        const appDisplay = Main.overview?._overview?._controls?._appDisplay;
+        const appDisplay =
+            Main.overview?._overview?._controls?._appDisplay;
         const grid = appDisplay?._grid;
 
         if (!appDisplay?.visible || !grid) return false;
@@ -100,7 +109,8 @@ export default class CloseOverviewController {
         for (let index = 0; index < grid.get_n_children(); index++) {
             const item = grid.get_child_at_index(index);
 
-            if (!item?.app || !item.visible || !item.icon?.icon) continue;
+            if (!item?.app || !item.visible || !item.icon?.icon)
+                continue;
 
             const icon = item.icon.icon;
 
@@ -109,10 +119,8 @@ export default class CloseOverviewController {
                  * Спочатку перевіряємо координати відносно плитки.
                  * Це працює незалежно від item.reactive.
                  */
-                const [tileValid, tileX, tileY] = item.transform_stage_point(
-                    stageX,
-                    stageY,
-                );
+                const [tileValid, tileX, tileY] =
+                    item.transform_stage_point(stageX, stageY);
 
                 if (
                     !tileValid ||
