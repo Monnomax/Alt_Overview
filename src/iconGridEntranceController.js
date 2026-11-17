@@ -90,6 +90,8 @@ export class IconGridEntranceController {
             this._displayVisibleId = 0;
         }
 
+        this._restoreActiveAnimationActors();
+
         this._pending = false;
         this._shown = false;
         this._cancelPending();
@@ -188,6 +190,42 @@ export class IconGridEntranceController {
         this._onOverviewStateChanged();
     }
 
+    /*
+     * Animate BaseIcon._iconBin instead of St.Icon or the running overlay.
+     * RunningIndicators.ensureOverlay() replaces the iconBin child,
+     * but the iconBin itself remains stable throughout the operation.
+     */
+    _getGridAnimationActor(item) {
+        const iconBin = item?.icon?._iconBin;
+        return this._isActorUsable(iconBin) ? iconBin : null;
+    }
+
+    _restoreActiveAnimationActors() {
+        const grid = this._appDisplay?._grid;
+        if (!grid) return;
+
+        for (let index = 0; index < grid.get_n_children(); index++) {
+            const item = grid.get_child_at_index(index);
+            if (!this._isActorUsable(item)) continue;
+
+            const actor = this._getGridAnimationActor(item);
+            if (!this._isActorUsable(actor)) continue;
+
+            if (
+                !actor._chGridEntranceOpacityPending &&
+                !actor._chGridExitPending
+            )
+                continue;
+
+            actor._chGridEntranceGeneration =
+                (actor._chGridEntranceGeneration ?? 0) + 1;
+            actor._chGridEntranceOpacityPending = false;
+            actor._chGridExitPending = false;
+
+            IconAnimator.reset(actor);
+        }
+    }
+
     _animateExit() {
         const appDisplay = this._appDisplay;
         if (
@@ -217,9 +255,8 @@ export class IconGridEntranceController {
             const icon = baseIcon?.icon;
             if (!this._isActorUsable(icon)) continue;
 
-            const overlay = item._chRunningOverlay;
-            const animationActor =
-                overlay && this._isActorUsable(overlay) ? overlay : icon;
+            const animationActor = this._getGridAnimationActor(item);
+            if (!this._isActorUsable(animationActor)) continue;
 
             const generation =
                 (animationActor._chGridEntranceGeneration ?? 0) + 1;
@@ -255,9 +292,8 @@ export class IconGridEntranceController {
             const icon = item.icon?.icon;
             if (!this._isActorUsable(icon)) continue;
 
-            const overlay = item._chRunningOverlay;
-            const animationActor =
-                overlay && this._isActorUsable(overlay) ? overlay : icon;
+            const animationActor = this._getGridAnimationActor(item);
+            if (!this._isActorUsable(animationActor)) continue;
 
             if (!animationActor._chGridExitPending) continue;
 
@@ -325,19 +361,22 @@ export class IconGridEntranceController {
             const icon = baseIcon?.icon;
             if (!this._isActorUsable(icon)) continue;
 
-            const overlay = item._chRunningOverlay;
-            const animationActor =
-                overlay && this._isActorUsable(overlay) ? overlay : icon;
+            const animationActor = this._getGridAnimationActor(item);
+            if (!this._isActorUsable(animationActor)) continue;
 
             let appName = "Unknown";
             try {
                 appName = item.app?.get_name?.() ?? "Unknown";
             } catch (_error) {}
 
+            const iconBin = item.icon?._iconBin;
+            const overlay = item._chRunningOverlay;
+
             diagnosticEntries.push({
                 app: appName,
                 item,
                 icon,
+                iconBin,
                 overlay:
                     overlay && this._isActorUsable(overlay)
                         ? overlay
@@ -345,6 +384,7 @@ export class IconGridEntranceController {
                 animationActor,
                 start: {
                     icon: _altIconEntranceSnapshot(icon),
+                    iconBin: _altIconEntranceSnapshot(iconBin),
                     overlay: _altIconEntranceSnapshot(overlay),
                     animationActor:
                         _altIconEntranceSnapshot(animationActor),
@@ -422,12 +462,21 @@ export class IconGridEntranceController {
                                 ? overlayCandidate
                                 : null;
 
-                        const currentActor = currentOverlay ?? currentIcon;
+                        const currentIconBin = read(
+                            () => entry.item?.icon?._iconBin
+                        );
+
+                        const currentActor =
+                            this._isActorUsable(currentIconBin)
+                                ? currentIconBin
+                                : currentOverlay ?? currentIcon;
 
                         const animationState =
                             _altIconEntranceSnapshot(entry.animationActor);
                         const iconState =
                             _altIconEntranceSnapshot(currentIcon);
+                        const iconBinState =
+                            _altIconEntranceSnapshot(currentIconBin);
                         const overlayState =
                             _altIconEntranceSnapshot(currentOverlay);
 
@@ -437,8 +486,11 @@ export class IconGridEntranceController {
                         if (entry.icon !== currentIcon)
                             changes.push("icon-reference-changed");
 
-                        if (entry.overlay !== currentOverlay)
-                            changes.push("overlay-reference-changed");
+                        if (entry.iconBin !== currentIconBin)
+                            changes.push("icon-bin-reference-changed");
+
+                        const overlayChanged =
+                            entry.overlay !== currentOverlay;
 
                         if (entry.animationActor !== currentActor)
                             changes.push("animation-actor-changed");
@@ -492,10 +544,12 @@ export class IconGridEntranceController {
                             app: entry.app,
                             issues,
                             changes,
+                            overlayChanged,
                             start: entry.start,
                             after: {
                                 animationActor: animationState,
                                 icon: iconState,
+                                iconBin: iconBinState,
                                 overlay: overlayState,
                             },
                         };
